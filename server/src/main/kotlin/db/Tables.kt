@@ -1,12 +1,14 @@
 package wtf.jobin.db
 
 import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
+import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.javatime.timestamp
 
 // ponytail: only tables with active Kotlin callers live here.
 // SQL schema in V1__init.sql owns the full 8-table contract; add the Exposed
-// mirror for {WatchEvents, Downloads, PartyRooms, PartyMembers, UserRecommendations}
+// mirror for {Downloads, PartyRooms, PartyMembers, UserRecommendations}
 // when the feature that reads them lands.
 
 object Users : UUIDTable("users") {
@@ -37,4 +39,15 @@ object MediaItems : UUIDTable("media_items") {
     val year = short("year").nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
+}
+
+object WatchEvents : Table("watch_events") {
+    val id = long("id").autoIncrement()
+    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
+    val positionSecs = integer("position_secs")
+    val eventType = varchar("event_type", 16)
+    val sessionId = javaUUID("session_id")
+    val createdAt = timestamp("created_at")
+    override val primaryKey = PrimaryKey(id)
 }
