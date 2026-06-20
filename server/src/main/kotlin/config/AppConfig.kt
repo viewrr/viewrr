@@ -2,12 +2,13 @@ package wtf.jobin.config
 
 import io.ktor.server.application.*
 
-// ponytail: Cors lives only in Http.kt (reads yaml directly). No field here.
 data class AppConfig(
     val db: Db,
     val redis: Redis,
     val auth: Auth,
     val media: Media,
+    val cors: Cors,
+    val env: String,
 ) {
     data class Db(
         val r2dbcUrl: String,
@@ -34,6 +35,8 @@ data class AppConfig(
         val hlsRoot: String,
     )
 
+    data class Cors(val allowedHosts: List<String>)
+
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
             db = Db(
@@ -57,6 +60,12 @@ data class AppConfig(
                 ffmpegPath = env.config.property("viewrr.media.ffmpegPath").getString(),
                 hlsRoot = env.config.property("viewrr.media.hlsRoot").getString(),
             ),
+            cors = Cors(
+                allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")
+                    ?.getList()
+                    ?: emptyList(),
+            ),
+            env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
         )
     }
 }

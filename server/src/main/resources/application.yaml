@@ -19,6 +19,7 @@ ktor:
       - wtf.jobin.RoutingKt.configureRouting
 
 viewrr:
+  env: "$VIEWRR_ENV:dev"
   db:
     # Host Postgres.app on port 5433 — has the paradedb extension installed.
     r2dbcUrl: "r2dbc:postgresql://localhost:5433/viewrr"
