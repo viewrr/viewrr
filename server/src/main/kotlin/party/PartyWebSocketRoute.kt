@@ -43,11 +43,11 @@ fun Route.partyWebSocketRoutes(hub: PartyHub, db: R2dbcDatabase) {
                 call.respond(HttpStatusCode.Forbidden)
                 return@post
             }
-            // Mint a session cookie the client will replay on the WS upgrade.
+            // Sessions plugin writes Set-Cookie on response; browsers attach automatically
+            // on the WS upgrade. cookieValue stays empty — native clients can parse
+            // the Set-Cookie header. ponytail: skip read-back, plugin writes async.
             call.sessions.set(UserSession(userId.toString(), isAdmin = false))
-            val cookie = call.response.cookies["VIEWRR_SESSION"]
-                ?: error("VIEWRR_SESSION cookie missing after sessions.set")
-            call.respond(WsTicketResponse(cookieName = cookie.name, cookieValue = cookie.value))
+            call.respond(WsTicketResponse(cookieName = "VIEWRR_SESSION", cookieValue = ""))
         }
     }
 
