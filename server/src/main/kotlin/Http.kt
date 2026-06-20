@@ -5,12 +5,11 @@ import io.ktor.server.application.*
 import io.ktor.server.plugins.compression.*
 import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.plugins.forwardedheaders.*
+import org.koin.ktor.ext.inject
+import wtf.jobin.config.AppConfig
 
 fun Application.configureHttp() {
-    val allowedHosts = environment.config
-        .propertyOrNull("viewrr.cors.allowedHosts")
-        ?.getList()
-        ?: emptyList()
+    val cfg by inject<AppConfig>()
 
     install(CORS) {
         allowMethod(HttpMethod.Options)
@@ -19,7 +18,7 @@ fun Application.configureHttp() {
         allowMethod(HttpMethod.Patch)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
-        allowedHosts.forEach { allowHost(it) }
+        cfg.cors.allowedHosts.forEach { allowHost(it) }
     }
     install(Compression)
     install(ForwardedHeaders) // for use behind a reverse proxy
