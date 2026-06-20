@@ -1,0 +1,23 @@
+version: v2
+clean: true
+plugins:
+  - local: [/Users/jobinlawrance/.sdkman/candidates/java/26.0.1-amzn/bin/java, -jar, /Users/jobinlawrance/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/protoc-gen-kotlin-multiplatform/0.11.0-grpc-187/a1fc85f75f7b7d287730c7c7dcfc893030f6d108/protoc-gen-kotlin-multiplatform-0.11.0-grpc-187-all.jar]
+    out: kotlin-multiplatform
+    opt:
+      - debugOutput=protoc-gen-kotlin-multiplatform.log
+      - generateComments=true
+      - generateFileLevelComments=true
+      - indentSize=4
+      - explicitApiModeEnabled=false
+      - platform=common
+  - local: [/Users/jobinlawrance/.sdkman/candidates/java/26.0.1-amzn/bin/java, -jar, /Users/jobinlawrance/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/protoc-gen-grpc-kotlin-multiplatform/0.11.0-grpc-187/abbf0b6520a0e388c240c935fb2e5afc6b142549/protoc-gen-grpc-kotlin-multiplatform-0.11.0-grpc-187-all.jar]
+    out: grpc-kotlin-multiplatform
+    opt:
+      - debugOutput=protoc-gen-grpc-kotlin-multiplatform.log
+      - generateComments=true
+      - generateFileLevelComments=true
+      - indentSize=4
+      - explicitApiModeEnabled=false
+      - platform=common
+inputs:
+  - directory: proto

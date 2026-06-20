@@ -1,0 +1,20 @@
+ktor:
+  deployment:
+    port: 8080
+  application:
+    modules:
+      - wtf.jobin.HttpKt.configureHttp
+      - wtf.jobin.HttpKt.module
+      - wtf.jobin.MonitoringKt.configureMonitoring
+      - wtf.jobin.SerializationKt.configureSerialization
+      - wtf.jobin.SecurityKt.configureSecurity
+      - wtf.jobin.WebsocketsKt.configureWebsockets
+      - wtf.jobin.SseKt.configureSse
+      - wtf.jobin.AutoHeadResponseKt.configureAutoHeadResponse
+      - wtf.jobin.RateLimitingKt.configureRateLimiting
+      - wtf.jobin.RequestValidationKt.configureRequestValidation
+      - wtf.jobin.ServerOpenTelemetryKt.configureOpenTelemetry
+      - wtf.jobin.ExposedKt.configureExposed
+      - wtf.jobin.GrpcKt.configureGrpc
+      - wtf.jobin.KoinKt.configureKoin
+      - wtf.jobin.RoutingKt.configureRouting
