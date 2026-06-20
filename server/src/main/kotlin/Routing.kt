@@ -14,6 +14,8 @@ import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.mediaRoutes
 import wtf.jobin.scanner.scannerRoutes
+import wtf.jobin.recs.RecsRepository
+import wtf.jobin.recs.recsRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -21,6 +23,7 @@ fun Application.configureRouting() {
     val scanner by inject<MediaScanner>()
     val transcoder by inject<HlsTranscoder>()
     val mediaSearch by inject<MediaSearchService>()
+    val recs by inject<RecsRepository>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -28,5 +31,6 @@ fun Application.configureRouting() {
         scannerRoutes(scanner)
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
+        recsRoutes(recs)
     }
 }

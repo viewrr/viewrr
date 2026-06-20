@@ -10,6 +10,7 @@ import wtf.jobin.koin.authModule
 import wtf.jobin.koin.dbModule
 import wtf.jobin.koin.redisModule
 import wtf.jobin.koin.mediaModule
+import wtf.jobin.koin.recsModule
 import wtf.jobin.koin.scannerModule
 
 fun Application.configureKoin() {
@@ -24,6 +25,7 @@ fun Application.configureKoin() {
             authModule,
             scannerModule,
             mediaModule,
+            recsModule,
         )
     }
 }
