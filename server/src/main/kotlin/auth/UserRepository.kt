@@ -51,6 +51,21 @@ class UserRepository(private val db: R2dbcDatabase) {
             .firstOrNull()
     }
 
+    suspend fun setAdmin(id: UUID, isAdmin: Boolean): UserRow? = suspendTransaction(db) {
+        val updated = Users.update({ Users.id eq id }) {
+            it[Users.isAdmin] = isAdmin
+            it[Users.updatedAt] = Instant.now()
+        }
+        if (updated == 0) {
+            null
+        } else {
+            Users.selectAll()
+                .where { Users.id eq id }
+                .map { it.toRow() }
+                .firstOrNull()
+        }
+    }
+
     private fun ResultRow.toRow() = UserRow(
         id = this[Users.id].value,
         username = this[Users.username],
