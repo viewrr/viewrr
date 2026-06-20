@@ -2,6 +2,11 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(ktorLibs.plugins.ktor)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlinx.rpc.grpc)
+}
+
+rpc {
+    protoc()
 }
 
 application {
@@ -56,6 +61,10 @@ dependencies {
     // Phase 3: Lettuce (Redis) + Argon2 (password hashing)
     implementation("io.lettuce:lettuce-core:6.5.1.RELEASE")
     implementation("de.mkammerer:argon2-jvm:2.12")
+
+    // Phase 9: gRPC client to Python rec engine (kotlinx.rpc over grpc-netty)
+    implementation(libs.kotlinx.rpc.grpc.client)
+    implementation(libs.grpc.netty)
 
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)

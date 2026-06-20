@@ -45,3 +45,5 @@ viewrr:
     allowedHosts:
       - "localhost:5173"
       - "localhost:3000"
+  recs:
+    grpcTarget: "$RECS_GRPC_TARGET:localhost:50051"

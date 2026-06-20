@@ -16,7 +16,9 @@ import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.mediaRoutes
 import wtf.jobin.scanner.scannerRoutes
+import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
+import wtf.jobin.recs.adminRecsRoutes
 import wtf.jobin.recs.recsRoutes
 import wtf.jobin.watch.WatchEventRepository
 import wtf.jobin.watch.watchEventRoutes
@@ -31,6 +33,7 @@ fun Application.configureRouting() {
     val transcoder by inject<HlsTranscoder>()
     val mediaSearch by inject<MediaSearchService>()
     val recs by inject<RecsRepository>()
+    val recEngine by inject<RecEngineClient>()
     val watchEvents by inject<WatchEventRepository>()
     val partyRooms by inject<PartyRoomRepository>()
     val db by inject<R2dbcDatabase>()
@@ -43,6 +46,7 @@ fun Application.configureRouting() {
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         recsRoutes(recs)
+        adminRecsRoutes(recEngine)
         watchEventRoutes(watchEvents)
         partyRoomRoutes(partyRooms)
         streamRoutes(db, appConfig.media)

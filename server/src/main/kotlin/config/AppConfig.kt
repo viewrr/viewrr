@@ -8,6 +8,7 @@ data class AppConfig(
     val auth: Auth,
     val media: Media,
     val cors: Cors,
+    val recs: Recs,
     val env: String,
 ) {
     data class Db(
@@ -38,6 +39,8 @@ data class AppConfig(
 
     data class Cors(val allowedHosts: List<String>)
 
+    data class Recs(val grpcTarget: String)
+
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
             db = Db(
@@ -66,6 +69,10 @@ data class AppConfig(
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")
                     ?.getList()
                     ?: emptyList(),
+            ),
+            recs = Recs(
+                grpcTarget = env.config.propertyOrNull("viewrr.recs.grpcTarget")?.getString()
+                    ?: "localhost:50051",
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
         )

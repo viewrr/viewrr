@@ -11,6 +11,7 @@ import wtf.jobin.auth.UserRepository
 import wtf.jobin.config.AppConfig
 import wtf.jobin.db.connectDatabase
 import wtf.jobin.media.MediaSearchService
+import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
 import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.scanner.Ffprobe
@@ -48,6 +49,8 @@ val mediaModule = module {
 
 val recsModule = module {
     single { RecsRepository(get()) }
+    // Lazy: connection only opens on first refresh call (issue: createdAtStart=false).
+    single { RecEngineClient(get<AppConfig>().recs.grpcTarget) }
 }
 
 val watchModule = module {
