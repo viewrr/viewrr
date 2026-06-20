@@ -18,6 +18,8 @@ import wtf.jobin.recs.RecsRepository
 import wtf.jobin.recs.recsRoutes
 import wtf.jobin.watch.WatchEventRepository
 import wtf.jobin.watch.watchEventRoutes
+import wtf.jobin.party.PartyRoomRepository
+import wtf.jobin.party.partyRoomRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -27,6 +29,7 @@ fun Application.configureRouting() {
     val mediaSearch by inject<MediaSearchService>()
     val recs by inject<RecsRepository>()
     val watchEvents by inject<WatchEventRepository>()
+    val partyRooms by inject<PartyRoomRepository>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -36,5 +39,6 @@ fun Application.configureRouting() {
         mediaSearchRoutes(mediaSearch)
         recsRoutes(recs)
         watchEventRoutes(watchEvents)
+        partyRoomRoutes(partyRooms)
     }
 }

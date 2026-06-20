@@ -8,8 +8,7 @@ import org.jetbrains.exposed.v1.javatime.timestamp
 
 // ponytail: only tables with active Kotlin callers live here.
 // SQL schema in V1__init.sql owns the full 8-table contract; add the Exposed
-// mirror for {Downloads, PartyRooms, PartyMembers} when the feature that
-// reads them lands.
+// mirror for {Downloads} when the feature that reads them lands.
 
 object Users : UUIDTable("users") {
     val username = varchar("username", 64).uniqueIndex()
@@ -59,4 +58,23 @@ object UserRecommendations : Table("user_recommendations") {
     val rank = short("rank")
     val computedAt = timestamp("computed_at")
     override val primaryKey = PrimaryKey(userId, mediaId)
+}
+
+object PartyRooms : UUIDTable("party_rooms") {
+    val ownerId = reference("owner_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
+    val joinCode = varchar("join_code", 8).uniqueIndex()
+    val positionSecs = integer("position_secs").default(0)
+    val isPlaying = bool("is_playing").default(false)
+    val lastSyncedAt = timestamp("last_synced_at")
+    val closedAt = timestamp("closed_at").nullable()
+    val createdAt = timestamp("created_at")
+}
+
+object PartyMembers : Table("party_members") {
+    val roomId = reference("room_id", PartyRooms.id, onDelete = ReferenceOption.CASCADE)
+    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val joinedAt = timestamp("joined_at")
+    val leftAt = timestamp("left_at").nullable()
+    override val primaryKey = PrimaryKey(roomId, userId)
 }
