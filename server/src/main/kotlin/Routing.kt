@@ -1,6 +1,8 @@
 package wtf.jobin
 
 import io.ktor.server.application.*
+import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
+import wtf.jobin.config.AppConfig
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
@@ -20,6 +22,7 @@ import wtf.jobin.watch.WatchEventRepository
 import wtf.jobin.watch.watchEventRoutes
 import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.party.partyRoomRoutes
+import wtf.jobin.streaming.streamRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -30,6 +33,8 @@ fun Application.configureRouting() {
     val recs by inject<RecsRepository>()
     val watchEvents by inject<WatchEventRepository>()
     val partyRooms by inject<PartyRoomRepository>()
+    val db by inject<R2dbcDatabase>()
+    val appConfig by inject<AppConfig>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -40,5 +45,6 @@ fun Application.configureRouting() {
         recsRoutes(recs)
         watchEventRoutes(watchEvents)
         partyRoomRoutes(partyRooms)
+        streamRoutes(db, appConfig.media)
     }
 }
