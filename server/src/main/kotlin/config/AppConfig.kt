@@ -10,6 +10,7 @@ data class AppConfig(
     val cors: Cors,
     val recs: Recs,
     val env: String,
+    val publicBaseUrl: String,
 ) {
     data class Db(
         val r2dbcUrl: String,
@@ -75,6 +76,8 @@ data class AppConfig(
                     ?: "localhost:50051",
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
+            publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()
+                ?: "http://localhost:8080",
         )
     }
 }

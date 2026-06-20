@@ -20,6 +20,7 @@ ktor:
 
 viewrr:
   env: "$VIEWRR_ENV:dev"
+  publicBaseUrl: "$PUBLIC_BASE_URL:http://localhost:8080"
   db:
     # Host Postgres.app on port 5433 — has the paradedb extension installed.
     r2dbcUrl: "r2dbc:postgresql://localhost:5433/viewrr"
