@@ -13,6 +13,7 @@ import wtf.jobin.db.connectDatabase
 import wtf.jobin.media.MediaSearchService
 import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
+import wtf.jobin.party.PartyHub
 import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.scanner.Ffprobe
 import wtf.jobin.scanner.HlsTranscoder
@@ -25,8 +26,11 @@ val dbModule = module {
 }
 
 val redisModule = module {
+    // PartyHub needs the raw RedisClient to open a pub/sub connection alongside the
+    // shared command connection. Both are eager so failures surface at boot.
+    single<RedisClient>(createdAtStart = true) { RedisClient.create(get<AppConfig>().redis.uri) }
     single<RedisAsyncCommands<String, String>>(createdAtStart = true) {
-        RedisClient.create(get<AppConfig>().redis.uri).connect().async()
+        get<RedisClient>().connect().async()
     }
 }
 
@@ -59,6 +63,9 @@ val watchModule = module {
 
 val partyModule = module {
     single { PartyRoomRepository(get()) }
+    single(createdAtStart = true) {
+        PartyHub(get<RedisClient>(), get<RedisAsyncCommands<String, String>>())
+    }
 }
 
 val downloadsModule = module {
