@@ -37,6 +37,8 @@ viewrr:
     refreshTtlDays: 30
   media:
     ffprobePath: "$FFPROBE_PATH:ffprobe"
+    ffmpegPath: "$FFMPEG_PATH:ffmpeg"
+    hlsRoot: "$HLS_ROOT:/tmp/viewrr-hls"
   cors:
     allowedHosts:
       - "localhost:5173"

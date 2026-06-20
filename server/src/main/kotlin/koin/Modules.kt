@@ -12,6 +12,7 @@ import wtf.jobin.config.AppConfig
 import wtf.jobin.db.connectDatabase
 import wtf.jobin.scanner.Ffprobe
 import wtf.jobin.scanner.MediaScanner
+import wtf.jobin.scanner.HlsTranscoder
 
 val dbModule = module {
     single<R2dbcDatabase> { connectDatabase(get<AppConfig>().db) }
@@ -33,4 +34,6 @@ val authModule = module {
 val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
     single { MediaScanner(get(), get()) }
+    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.hlsRoot) }
 }
+

@@ -28,7 +28,11 @@ data class AppConfig(
         val refreshTtlDays: Long,
     )
 
-    data class Media(val ffprobePath: String)
+    data class Media(
+        val ffprobePath: String,
+        val ffmpegPath: String,
+        val hlsRoot: String,
+    )
 
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
@@ -48,7 +52,11 @@ data class AppConfig(
                 accessTtlMinutes = env.config.property("viewrr.auth.accessTtlMinutes").getString().toLong(),
                 refreshTtlDays = env.config.property("viewrr.auth.refreshTtlDays").getString().toLong(),
             ),
-            media = Media(ffprobePath = env.config.property("viewrr.media.ffprobePath").getString()),
+            media = Media(
+                ffprobePath = env.config.property("viewrr.media.ffprobePath").getString(),
+                ffmpegPath = env.config.property("viewrr.media.ffmpegPath").getString(),
+                hlsRoot = env.config.property("viewrr.media.hlsRoot").getString(),
+            ),
         )
     }
 }
