@@ -8,7 +8,7 @@ import org.jetbrains.exposed.v1.javatime.timestamp
 
 // ponytail: only tables with active Kotlin callers live here.
 // SQL schema in V1__init.sql owns the full 8-table contract; add the Exposed
-// mirror for {Downloads} when the feature that reads them lands.
+// mirror when the feature that reads them lands.
 
 object Users : UUIDTable("users") {
     val username = varchar("username", 64).uniqueIndex()
@@ -77,4 +77,16 @@ object PartyMembers : Table("party_members") {
     val joinedAt = timestamp("joined_at")
     val leftAt = timestamp("left_at").nullable()
     override val primaryKey = PrimaryKey(roomId, userId)
+}
+
+object Downloads : UUIDTable("downloads") {
+    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
+    val deviceId = varchar("device_id", 128)
+    val status = varchar("status", 16)
+    val filePath = text("file_path").nullable()
+    val expiresAt = timestamp("expires_at")
+    val createdAt = timestamp("created_at")
+
+    init { uniqueIndex(userId, mediaId, deviceId) }
 }

@@ -33,6 +33,7 @@ data class AppConfig(
         val ffprobePath: String,
         val ffmpegPath: String,
         val hlsRoot: String,
+        val downloadsRoot: String,
     )
 
     data class Cors(val allowedHosts: List<String>)
@@ -59,6 +60,7 @@ data class AppConfig(
                 ffprobePath = env.config.property("viewrr.media.ffprobePath").getString(),
                 ffmpegPath = env.config.property("viewrr.media.ffmpegPath").getString(),
                 hlsRoot = env.config.property("viewrr.media.hlsRoot").getString(),
+                downloadsRoot = env.config.property("viewrr.media.downloadsRoot").getString(),
             ),
             cors = Cors(
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")
