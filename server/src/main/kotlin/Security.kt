@@ -11,10 +11,12 @@ import io.ktor.server.sessions.*
 import io.lettuce.core.SetArgs
 import io.lettuce.core.api.async.RedisAsyncCommands
 import kotlinx.coroutines.future.await
+import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 import wtf.jobin.config.AppConfig
 
 /** Session payload stored in Redis behind the VIEWRR_SESSION cookie. */
+@Serializable
 data class UserSession(val userId: String, val isAdmin: Boolean)
 
 fun Application.configureSecurity() {
