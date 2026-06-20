@@ -11,6 +11,7 @@ import wtf.jobin.auth.UserRepository
 import wtf.jobin.config.AppConfig
 import wtf.jobin.db.connectDatabase
 import wtf.jobin.media.MediaSearchService
+import wtf.jobin.recs.RecsRepository
 import wtf.jobin.scanner.Ffprobe
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.MediaScanner
@@ -40,4 +41,8 @@ val scannerModule = module {
 
 val mediaModule = module {
     single { MediaSearchService(get()) }
+}
+
+val recsModule = module {
+    single { RecsRepository(get()) }
 }
