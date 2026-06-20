@@ -34,8 +34,8 @@ val authModule = module {
 
 val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
-    single { MediaScanner(get(), get()) }
     single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.hlsRoot) }
+    single { MediaScanner(get(), get(), get()) }
 }
 
 val mediaModule = module {
