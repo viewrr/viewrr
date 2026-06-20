@@ -51,8 +51,9 @@ fun Application.configureRouting() {
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
         watchEventRoutes(watchEvents)
-        partyRoomRoutes(partyRooms)
+        partyRoomRoutes(partyRooms, partyHub)
         streamRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)
     }
+    partyHub.startFlushLoop(this)
 }
