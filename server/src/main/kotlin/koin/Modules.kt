@@ -15,6 +15,7 @@ import wtf.jobin.recs.RecsRepository
 import wtf.jobin.scanner.Ffprobe
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.MediaScanner
+import wtf.jobin.watch.WatchEventRepository
 
 val dbModule = module {
     single<R2dbcDatabase> { connectDatabase(get<AppConfig>().db) }
@@ -45,4 +46,8 @@ val mediaModule = module {
 
 val recsModule = module {
     single { RecsRepository(get()) }
+}
+
+val watchModule = module {
+    single { WatchEventRepository(get()) }
 }

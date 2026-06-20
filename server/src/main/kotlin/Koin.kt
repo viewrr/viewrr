@@ -12,6 +12,7 @@ import wtf.jobin.koin.redisModule
 import wtf.jobin.koin.mediaModule
 import wtf.jobin.koin.recsModule
 import wtf.jobin.koin.scannerModule
+import wtf.jobin.koin.watchModule
 
 fun Application.configureKoin() {
     val appConfig = AppConfig.from(environment)
@@ -26,6 +27,7 @@ fun Application.configureKoin() {
             scannerModule,
             mediaModule,
             recsModule,
+            watchModule,
         )
     }
 }
