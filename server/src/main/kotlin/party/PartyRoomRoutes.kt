@@ -16,7 +16,7 @@ data class CreatePartyRoomRequest(val mediaId: String)
 @Serializable
 data class JoinPartyRoomRequest(val joinCode: String)
 
-fun Route.partyRoomRoutes(repo: PartyRoomRepository) {
+fun Route.partyRoomRoutes(repo: PartyRoomRepository, hub: PartyHub) {
     authenticate("auth-jwt") {
         route("/party-rooms") {
             post {
@@ -51,6 +51,9 @@ fun Route.partyRoomRoutes(repo: PartyRoomRepository) {
                     call.respond(HttpStatusCode.Forbidden)
                     return@post
                 }
+                // Flush Redis state to Postgres before marking the room closed so the
+                // background loop can't race a new position into a closed row.
+                hub.closeRoom(roomId)
                 val closed = repo.close(roomId) ?: throw NotFoundException()
                 call.respond(closed.toView())
             }

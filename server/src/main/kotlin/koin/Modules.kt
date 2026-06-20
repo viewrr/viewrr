@@ -64,7 +64,7 @@ val watchModule = module {
 val partyModule = module {
     single { PartyRoomRepository(get()) }
     single(createdAtStart = true) {
-        PartyHub(get<RedisClient>(), get<RedisAsyncCommands<String, String>>())
+        PartyHub(get<RedisClient>(), get<RedisAsyncCommands<String, String>>(), get<R2dbcDatabase>())
     }
 }
 

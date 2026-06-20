@@ -103,6 +103,17 @@ fun Route.partyWebSocketRoutes(hub: PartyHub, db: R2dbcDatabase) {
                             val snap = PartyMessage.StateSnapshot(pos, playing, members)
                             send(Frame.Text(PartyJson.encodeToString(PartyMessage.serializer(), snap)))
                         }
+                        is PartyMessage.ChatEvent -> {
+                            // Body capped at 500 chars; server stamps senderId + ts so
+                            // clients can't spoof either. Re-encode and publish — same
+                            // channel as Play/Pause/Seek, broadcasted to every subscriber.
+                            val stamped = msg.copy(
+                                body = msg.body.take(500),
+                                senderId = userId,
+                                atServerEpochMs = System.currentTimeMillis(),
+                            )
+                            hub.publish(roomId, PartyJson.encodeToString(PartyMessage.serializer(), stamped))
+                        }
                         is PartyMessage.StateSnapshot -> {
                             // ponytail: clients shouldn't author snapshots; silently drop.
                         }
