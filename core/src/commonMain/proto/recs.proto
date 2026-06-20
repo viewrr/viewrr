@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package wtf.jobin.recs.proto;
+
+option java_package = "wtf.jobin.recs.proto";
+option java_multiple_files = true;
+
+// Recommendation engine RPCs served by the Python FastAPI side.
+// Server-side stub lives in a separate repo; Ktor only consumes.
+service RecEngine {
+  // Recompute top-K recs for a single user and persist them.
+  // Returns the number of rows written into user_recommendations.
+  rpc RefreshUserRecs(RefreshRequest) returns (RefreshResponse);
+}
+
+message RefreshRequest {
+  string user_id = 1;
+  int32 top_k = 2;
+}
+
+message RefreshResponse {
+  int32 written = 1;
+}
