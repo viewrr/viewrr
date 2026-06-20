@@ -8,6 +8,7 @@ import wtf.jobin.config.AppConfig
 import wtf.jobin.config.assertProdSafe
 import wtf.jobin.koin.authModule
 import wtf.jobin.koin.dbModule
+import wtf.jobin.koin.downloadsModule
 import wtf.jobin.koin.redisModule
 import wtf.jobin.koin.mediaModule
 import wtf.jobin.koin.recsModule
@@ -30,6 +31,7 @@ fun Application.configureKoin() {
             recsModule,
             watchModule,
             partyModule,
+            downloadsModule,
         )
     }
 }
