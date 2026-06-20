@@ -20,13 +20,14 @@ ktor:
 
 viewrr:
   db:
-    r2dbcUrl: "r2dbc:postgresql://localhost:55432/viewrr"
-    jdbcUrl: "jdbc:postgresql://localhost:55432/viewrr"
-    user: "viewrr"
-    password: "$DB_PASSWORD:viewrr"
+    # Host Postgres.app on port 5433 — has the paradedb extension installed.
+    r2dbcUrl: "r2dbc:postgresql://localhost:5433/viewrr"
+    jdbcUrl: "jdbc:postgresql://localhost:5433/viewrr"
+    user: "$DB_USER:postgres"
+    password: "$DB_PASSWORD:postgres"
     poolMaxSize: 20
   redis:
-    uri: "$REDIS_URI:redis://localhost:56379/0"
+    uri: "$REDIS_URI:redis://localhost:6379/0"
   auth:
     jwtSecret: "$JWT_SECRET:change-me-dev-only"
     jwtIssuer: "viewrr"
