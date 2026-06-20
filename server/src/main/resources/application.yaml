@@ -15,6 +15,7 @@ ktor:
       - wtf.jobin.RateLimitingKt.configureRateLimiting
       - wtf.jobin.RequestValidationKt.configureRequestValidation
       - wtf.jobin.ServerOpenTelemetryKt.configureOpenTelemetry
+      - wtf.jobin.plugins.StatusPagesKt.configureStatusPages
       - wtf.jobin.RoutingKt.configureRouting
 
 viewrr:

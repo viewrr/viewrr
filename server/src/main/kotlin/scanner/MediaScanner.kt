@@ -1,8 +1,11 @@
 package wtf.jobin.scanner
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
@@ -17,6 +20,7 @@ import kotlin.io.path.nameWithoutExtension
 
 private val MEDIA_EXTS = setOf("mp4", "m4v", "mkv", "webm", "mov", "avi", "ts")
 
+@Serializable
 data class ScanResult(val added: Int, val removed: Int, val skipped: Int)
 
 class MediaScanner(private val db: R2dbcDatabase, private val ffprobe: Ffprobe) {
@@ -32,10 +36,11 @@ class MediaScanner(private val db: R2dbcDatabase, private val ffprobe: Ffprobe) 
         val root = Path.of(rootPath)
         require(Files.isDirectory(root)) { "library root not a directory: $rootPath" }
 
-        val onDisk = mutableListOf<Path>()
-        Files.walk(root).use { stream ->
-            stream.filter { Files.isRegularFile(it) && it.extension.lowercase() in MEDIA_EXTS }
-                .forEach { onDisk.add(it) }
+        val onDisk = withContext(Dispatchers.IO) {
+            Files.walk(root).use { stream ->
+                stream.filter { Files.isRegularFile(it) && it.extension.lowercase() in MEDIA_EXTS }
+                    .toList()
+            }
         }
 
         val onDiskPaths = onDisk.map { it.toAbsolutePath().toString() }.toSet()

@@ -2,6 +2,7 @@ package wtf.jobin.auth
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import io.lettuce.core.ScriptOutputType
 import io.lettuce.core.SetArgs
 import io.lettuce.core.api.async.RedisAsyncCommands
 import kotlinx.coroutines.future.await
@@ -10,6 +11,9 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.Date
 import java.util.UUID
+
+private const val CONSUME_REFRESH_LUA =
+    "local v=redis.call('GET',KEYS[1]); if v then redis.call('DEL',KEYS[1]) end; return v"
 
 class TokenService(
     private val cfg: AppConfig.Auth,
@@ -42,12 +46,14 @@ class TokenService(
         return token
     }
 
-    /** Returns userId if the token exists; deletes it (single-use). Caller must mint a fresh pair. */
+    /** Atomic GET+DEL via Lua — defeats double-spend race on concurrent refreshes. */
     suspend fun consumeRefresh(token: String): UUID? {
-        val key = "refresh:$token"
-        val userId = redis.get(key).await() ?: return null
-        redis.del(key).await()
-        return UUID.fromString(userId)
+        val userId: String? = redis.eval<String?>(
+            CONSUME_REFRESH_LUA,
+            ScriptOutputType.VALUE,
+            "refresh:$token",
+        ).await()
+        return userId?.let(UUID::fromString)
     }
 
     suspend fun revokeRefresh(token: String) {

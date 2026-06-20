@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.math.roundToInt
 
@@ -21,20 +22,10 @@ class Ffprobe(private val binaryPath: String) {
         val out = proc.inputStream.bufferedReader().readText()
         if (proc.waitFor() != 0) return@withContext null
 
-        val root = json.parseToJsonElement(out).jsonObject
-        val format = root["format"]?.jsonObject ?: return@withContext null
+        val format = json.parseToJsonElement(out).jsonObject["format"]?.jsonObject
+            ?: return@withContext null
         val duration = format["duration"]?.jsonPrimitive?.content?.toDoubleOrNull()?.roundToInt()
         val size = format["size"]?.jsonPrimitive?.content?.toLongOrNull()
-        MediaProbe(duration, size, guessMime(file))
-    }
-
-    private fun guessMime(file: Path): String? = when (file.toString().substringAfterLast('.').lowercase()) {
-        "mp4", "m4v" -> "video/mp4"
-        "mkv" -> "video/x-matroska"
-        "webm" -> "video/webm"
-        "mov" -> "video/quicktime"
-        "avi" -> "video/x-msvideo"
-        "ts" -> "video/mp2t"
-        else -> null
+        MediaProbe(duration, size, Files.probeContentType(file))
     }
 }

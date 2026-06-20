@@ -11,30 +11,26 @@ import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabaseConfig
 import wtf.jobin.config.AppConfig
 import java.time.Duration
 
-object DatabaseFactory {
-    fun migrate(cfg: AppConfig.Db) {
-        Flyway.configure()
-            .dataSource(cfg.jdbcUrl, cfg.user, cfg.password)
-            .locations("classpath:db/migration")
-            .load()
-            .migrate()
-    }
+fun runMigrations(cfg: AppConfig.Db) {
+    Flyway.configure()
+        .dataSource(cfg.jdbcUrl, cfg.user, cfg.password)
+        .locations("classpath:db/migration")
+        .load()
+        .migrate()
+}
 
-    fun connect(cfg: AppConfig.Db): R2dbcDatabase {
-        val baseFactory = ConnectionFactories.get(
-            ConnectionFactoryOptions.parse(cfg.r2dbcUrl).mutate()
-                .option(ConnectionFactoryOptions.USER, cfg.user)
-                .option(ConnectionFactoryOptions.PASSWORD, cfg.password)
-                .build()
-        )
-        val poolConfig = ConnectionPoolConfiguration.builder(baseFactory)
-            .maxSize(cfg.poolMaxSize)
-            .maxIdleTime(Duration.ofMinutes(5))
+fun connectDatabase(cfg: AppConfig.Db): R2dbcDatabase {
+    val baseFactory = ConnectionFactories.get(
+        ConnectionFactoryOptions.parse(cfg.r2dbcUrl).mutate()
+            .option(ConnectionFactoryOptions.USER, cfg.user)
+            .option(ConnectionFactoryOptions.PASSWORD, cfg.password)
             .build()
-        val pool = ConnectionPool(poolConfig)
-        val builder = R2dbcDatabaseConfig.Builder().also {
-            it.explicitDialect = PostgreSQLDialect()
-        }
-        return R2dbcDatabase.connect(connectionFactory = pool, databaseConfig = builder)
-    }
+    )
+    val poolConfig = ConnectionPoolConfiguration.builder(baseFactory)
+        .maxSize(cfg.poolMaxSize)
+        .maxIdleTime(Duration.ofMinutes(5))
+        .build()
+    val pool = ConnectionPool(poolConfig)
+    val builder = R2dbcDatabaseConfig.Builder().also { it.explicitDialect = PostgreSQLDialect() }
+    return R2dbcDatabase.connect(connectionFactory = pool, databaseConfig = builder)
 }

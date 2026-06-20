@@ -6,12 +6,12 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 import wtf.jobin.auth.AuthService
 import wtf.jobin.auth.authRoutes
-import wtf.jobin.scanner.ScannerService
+import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.scannerRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
-    val scanner by inject<ScannerService>()
+    val scanner by inject<MediaScanner>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)

@@ -8,7 +8,7 @@ import io.opentelemetry.instrumentation.ktor.v3_0.KtorServerTelemetry
 
 fun Application.configureOpenTelemetry() {
     install(KtorServerTelemetry) {
-        setOpenTelemetry(getOpenTelemetry(serviceName = "ktor-sample"))
+        setOpenTelemetry(getOpenTelemetry(serviceName = "viewrr"))
         capturedRequestHeaders(HttpHeaders.UserAgent)
         spanKindExtractor {
             if (httpMethod == HttpMethod.Post) {
