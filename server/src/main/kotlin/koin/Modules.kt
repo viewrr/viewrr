@@ -18,6 +18,7 @@ import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.scanner.Ffprobe
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.MediaScanner
+import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.Mp4Downloader
 import wtf.jobin.watch.WatchEventRepository
 
@@ -70,4 +71,5 @@ val partyModule = module {
 
 val downloadsModule = module {
     single { Mp4Downloader(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.downloadsRoot) }
+    single { DownloadService(get(), get(), get<AppConfig>().auth) }
 }

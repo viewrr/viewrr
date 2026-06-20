@@ -27,6 +27,8 @@ import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.party.partyRoomRoutes
 import wtf.jobin.streaming.streamRoutes
 import wtf.jobin.party.partyWebSocketRoutes
+import wtf.jobin.downloads.DownloadService
+import wtf.jobin.downloads.downloadRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -41,6 +43,7 @@ fun Application.configureRouting() {
     val db by inject<R2dbcDatabase>()
     val appConfig by inject<AppConfig>()
     val partyHub by inject<PartyHub>()
+    val downloads by inject<DownloadService>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -54,6 +57,7 @@ fun Application.configureRouting() {
         partyRoomRoutes(partyRooms, partyHub)
         streamRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)
+        downloadRoutes(downloads, appConfig.publicBaseUrl)
     }
     partyHub.startFlushLoop(this)
 }
