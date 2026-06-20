@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+!gradle-wrapper.jar
+out/
+
+# Kotlin
+.kotlin/
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Embedded H2 dev databases
+*.db
+*.mv.db
+*.trace.db
+
+# Tooling caches
+.agents/
+.serena/
+.mcp_data/
+skills-lock.json
+
+# OS
+.DS_Store
+
+# Local env / logs
+.env
+.env.local
+*.log

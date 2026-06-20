@@ -3,10 +3,11 @@ ktor:
     port: 8080
   application:
     modules:
+      - wtf.jobin.KoinKt.configureKoin
       - wtf.jobin.HttpKt.configureHttp
-      - wtf.jobin.HttpKt.module
       - wtf.jobin.MonitoringKt.configureMonitoring
       - wtf.jobin.SerializationKt.configureSerialization
+      - wtf.jobin.plugins.DatabaseKt.configureDatabase
       - wtf.jobin.SecurityKt.configureSecurity
       - wtf.jobin.WebsocketsKt.configureWebsockets
       - wtf.jobin.SseKt.configureSse
@@ -14,7 +15,27 @@ ktor:
       - wtf.jobin.RateLimitingKt.configureRateLimiting
       - wtf.jobin.RequestValidationKt.configureRequestValidation
       - wtf.jobin.ServerOpenTelemetryKt.configureOpenTelemetry
-      - wtf.jobin.ExposedKt.configureExposed
-      - wtf.jobin.GrpcKt.configureGrpc
-      - wtf.jobin.KoinKt.configureKoin
       - wtf.jobin.RoutingKt.configureRouting
+
+viewrr:
+  db:
+    r2dbcUrl: "r2dbc:postgresql://localhost:55432/viewrr"
+    jdbcUrl: "jdbc:postgresql://localhost:55432/viewrr"
+    user: "viewrr"
+    password: "$DB_PASSWORD:viewrr"
+    poolMaxSize: 20
+  redis:
+    uri: "$REDIS_URI:redis://localhost:56379/0"
+  auth:
+    jwtSecret: "$JWT_SECRET:change-me-dev-only"
+    jwtIssuer: "viewrr"
+    jwtAudience: "viewrr-clients"
+    jwtRealm: "viewrr"
+    accessTtlMinutes: 15
+    refreshTtlDays: 30
+  media:
+    ffprobePath: "$FFPROBE_PATH:ffprobe"
+  cors:
+    allowedHosts:
+      - "localhost:5173"
+      - "localhost:3000"
