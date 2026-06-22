@@ -12,6 +12,9 @@ import wtf.jobin.config.AppConfig
 import wtf.jobin.collection.CollectionRepository
 import wtf.jobin.db.connectDatabase
 import wtf.jobin.media.MediaSearchService
+import wtf.jobin.music.MusicProbe
+import wtf.jobin.music.MusicRepository
+import wtf.jobin.music.MusicScanner
 import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
 import wtf.jobin.party.PartyHub
@@ -84,4 +87,10 @@ val downloadsModule = module {
 
 val collectionModule = module {
     single { CollectionRepository(get()) }
+}
+
+val musicModule = module {
+    single { MusicProbe(get<AppConfig>().media.ffprobePath) }
+    single { MusicScanner(get(), get()) }
+    single { MusicRepository(get()) }
 }
