@@ -12,6 +12,7 @@ import wtf.jobin.koin.dbModule
 import wtf.jobin.koin.downloadsModule
 import wtf.jobin.koin.redisModule
 import wtf.jobin.koin.mediaModule
+import wtf.jobin.koin.musicModule
 import wtf.jobin.koin.recsModule
 import wtf.jobin.koin.partyModule
 import wtf.jobin.koin.scannerModule
@@ -34,6 +35,7 @@ fun Application.configureKoin() {
             partyModule,
             downloadsModule,
             collectionModule,
+            musicModule,
         )
     }
 }

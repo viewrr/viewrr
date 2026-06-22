@@ -9,6 +9,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.launch
+import wtf.jobin.music.MusicScanner
 import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,7 +28,7 @@ data class PatchLibraryRequest(
     val watchEnabled: Boolean? = null,
 )
 
-fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher, scanner: MediaScanner) {
+fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher, scanner: MediaScanner, musicScanner: MusicScanner) {
     authenticate("auth-jwt") {
         route("/admin/libraries") {
 
@@ -41,9 +42,14 @@ fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher, scanne
                 if (!Files.isDirectory(path)) throw IllegalArgumentException("rootPath is not a directory: ${body.rootPath}")
                 if (!Files.isReadable(path)) throw IllegalArgumentException("rootPath is not readable: ${body.rootPath}")
                 val row = repo.create(body.name, body.kind, path.toAbsolutePath().toString())
-                if (row.watchEnabled) watcher.watch(row.id, Path.of(row.rootPath))
-                // Index files already on disk now; watcher only catches future events.
-                call.application.launch { runCatching { scanner.scan(row.id) } }
+                if (row.kind == "music") {
+                    // ponytail: no live-watch for music v1; manual/scheduled rescans only.
+                    call.application.launch { runCatching { musicScanner.scan(row.id) } }
+                } else {
+                    if (row.watchEnabled) watcher.watch(row.id, Path.of(row.rootPath))
+                    // Index files already on disk now; watcher only catches future events.
+                    call.application.launch { runCatching { scanner.scan(row.id) } }
+                }
                 call.respond(HttpStatusCode.Created, row.toView())
             }
 
@@ -60,9 +66,14 @@ fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher, scanne
                 val updated = repo.patch(id, body.name, body.watchEnabled) ?: throw NotFoundException()
                 when (body.watchEnabled) {
                     true -> {
-                        watcher.watch(updated.id, Path.of(updated.rootPath))
-                        // Catch up on anything added while watch was off.
-                        call.application.launch { runCatching { scanner.scan(updated.id) } }
+                        if (updated.kind == "music") {
+                            // ponytail: no live-watch for music v1; rescan only.
+                            call.application.launch { runCatching { musicScanner.scan(updated.id) } }
+                        } else {
+                            watcher.watch(updated.id, Path.of(updated.rootPath))
+                            // Catch up on anything added while watch was off.
+                            call.application.launch { runCatching { scanner.scan(updated.id) } }
+                        }
                     }
                     false -> watcher.unwatch(updated.id)
                     null -> {}

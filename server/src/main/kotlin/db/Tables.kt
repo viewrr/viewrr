@@ -99,3 +99,18 @@ object Downloads : UUIDTable("downloads") {
 
     init { uniqueIndex(userId, mediaId, deviceId) }
 }
+
+object MusicTracks : UUIDTable("music_tracks") {
+    val libraryId = reference("library_id", Libraries.id, onDelete = ReferenceOption.CASCADE)
+    val title = text("title")
+    val artist = text("artist").nullable()
+    val album = text("album").nullable()
+    val albumArtist = text("album_artist").nullable()
+    val trackNumber = integer("track_number").nullable()
+    val discNumber = integer("disc_number").nullable()
+    val durationSecs = integer("duration_secs").nullable()
+    val originalPath = text("original_path").uniqueIndex()
+    val mimeType = varchar("mime_type", 127).nullable()
+    val createdAt = timestamp("created_at")
+    val updatedAt = timestamp("updated_at")
+}
