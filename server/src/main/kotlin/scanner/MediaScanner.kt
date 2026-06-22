@@ -68,6 +68,13 @@ class MediaScanner(
             val abs = file.toAbsolutePath().toString()
             if (abs in existingPaths) { skipped++; continue }
             val probe = ffprobe.probe(file)
+            // ponytail: ffprobe is the source of truth for "is this actually playable video";
+            // the extension is just a fast prefilter.
+            if (probe == null || !probe.hasVideo) {
+                skipped++
+                log.info("skip non-video file: {}", abs)
+                continue
+            }
             val parsed = FilenameParser.parse(file.nameWithoutExtension)
             val now = Instant.now()
             val newId = suspendTransaction(db) {
@@ -80,9 +87,9 @@ class MediaScanner(
                     it[MediaItems.episodeNumber] = parsed.episodeNumber
                     it[MediaItems.year] = parsed.year?.toShort()
                     it[MediaItems.originalPath] = abs
-                    it[MediaItems.durationSecs] = probe?.durationSecs
-                    it[MediaItems.sizeBytes] = probe?.sizeBytes
-                    it[MediaItems.mimeType] = probe?.mimeType
+                    it[MediaItems.durationSecs] = probe.durationSecs
+                    it[MediaItems.sizeBytes] = probe.sizeBytes
+                    it[MediaItems.mimeType] = probe.mimeType
                     it[MediaItems.createdAt] = now
                     it[MediaItems.updatedAt] = now
                 }.value
