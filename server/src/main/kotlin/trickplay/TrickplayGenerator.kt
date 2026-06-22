@@ -55,16 +55,20 @@ class TrickplayGenerator(
         val sprite = outDir.resolve("trickplay.jpg")
         val vtt = outDir.resolve("trickplay.vtt")
 
-        withContext(Dispatchers.IO) {
+        val ready = withContext(Dispatchers.IO) {
             Files.createDirectories(outDir)
             // Cache hit: both assets present → nothing to regenerate.
-            if (!(Files.isRegularFile(sprite) && Files.isRegularFile(vtt))) {
-                runFfmpeg(inputPath, outDir, mediaId)
-                val n = (duration?.let { minOf(ceil(it / INTERVAL.toDouble()).toInt(), MAX_THUMBS) } ?: 1)
-                    .coerceAtLeast(1)
-                Files.writeString(vtt, buildVtt(n))
-            }
+            if (Files.isRegularFile(sprite) && Files.isRegularFile(vtt)) return@withContext true
+            runFfmpeg(inputPath, outDir, mediaId)
+            // Content shorter than one interval yields no frames; ffmpeg exits 0 but writes
+            // no sprite. No scrub preview is possible → signal "no trickplay" to the caller.
+            if (!Files.isRegularFile(sprite)) return@withContext false
+            val n = (duration?.let { minOf(ceil(it / INTERVAL.toDouble()).toInt(), MAX_THUMBS) } ?: 1)
+                .coerceAtLeast(1)
+            Files.writeString(vtt, buildVtt(n))
+            true
         }
+        if (!ready) return null
 
         return TrickplayInfo(
             spriteUrl = "/stream/$mediaId/trickplay.jpg",
@@ -80,7 +84,8 @@ class TrickplayGenerator(
     private fun runFfmpeg(inputPath: String, outDir: Path, mediaId: UUID) {
         val args = listOf(
             ffmpegPath, "-y", "-i", inputPath,
-            "-vf", "fps=1/$INTERVAL,scale=$THUMB_W:$THUMB_H,tile=${COLS}x${COLS}",
+            // format=yuvj420p: mjpeg rejects full-range yuv444p sources ("Error while opening encoder").
+            "-vf", "fps=1/$INTERVAL,scale=$THUMB_W:$THUMB_H,tile=${COLS}x${COLS},format=yuvj420p",
             "-frames:v", "1", "-an", "trickplay.jpg",
         )
         // cwd = outDir so `trickplay.jpg` lands in the flat hls dir the /stream route serves.
