@@ -9,6 +9,7 @@ import wtf.jobin.auth.PasswordHasher
 import wtf.jobin.auth.TokenService
 import wtf.jobin.auth.UserRepository
 import wtf.jobin.config.AppConfig
+import wtf.jobin.collection.CollectionRepository
 import wtf.jobin.db.connectDatabase
 import wtf.jobin.media.MediaSearchService
 import wtf.jobin.recs.RecEngineClient
@@ -79,4 +80,8 @@ val partyModule = module {
 val downloadsModule = module {
     single { Mp4Downloader(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.downloadsRoot) }
     single { DownloadService(get(), get(), get<AppConfig>().auth) }
+}
+
+val collectionModule = module {
+    single { CollectionRepository(get()) }
 }
