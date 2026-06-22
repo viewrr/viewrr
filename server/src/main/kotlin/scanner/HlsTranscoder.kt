@@ -42,6 +42,21 @@ class HlsTranscoder(
         val outDir = Path.of(hlsRoot, libraryId.toString(), mediaId.toString(), "hls")
         val playlist = outDir.resolve("playlist.m3u8")
 
+        // ponytail: direct-play = single-rendition stream-copy; no ABR ladder for already-compatible
+        // sources (CPU/quality win). Re-encode path unchanged for everything else.
+        val codecs = withContext(Dispatchers.IO) { probeSourceCodecs(inputPath) }
+        if (isDirectPlayEligible(inputPath, codecs)) {
+            remux(inputPath, outDir)
+            val absPlaylist = playlist.toAbsolutePath()
+            suspendTransaction(db) {
+                MediaItems.update({ MediaItems.id eq mediaId }) {
+                    it[hlsPath] = absPlaylist.toString()
+                    it[updatedAt] = Instant.now()
+                }
+            }
+            return absPlaylist
+        }
+
         withContext(Dispatchers.IO) {
             Files.createDirectories(outDir)
             val dims = probeDimensions(inputPath)
@@ -128,6 +143,79 @@ class HlsTranscoder(
             }
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    /** First video stream's codec_name + pix_fmt and first audio stream's codec_name. Nulls on failure. */
+    private data class SourceCodecs(val videoCodec: String?, val pixFmt: String?, val audioCodec: String?)
+
+    /**
+     * Probe the source's first video stream (codec_name, pix_fmt) and first audio stream (codec_name).
+     * Used to decide direct-play eligibility. Returns all-null on probe failure or unparseable output.
+     */
+    private fun probeSourceCodecs(inputPath: String): SourceCodecs {
+        return try {
+            val proc = ProcessBuilder(
+                ffprobePath, "-v", "error",
+                "-show_entries", "stream=codec_type,codec_name,pix_fmt",
+                "-of", "json",
+                inputPath,
+            ).redirectErrorStream(true).start()
+            val out = proc.inputStream.bufferedReader().readText()
+            if (proc.waitFor() != 0) return SourceCodecs(null, null, null)
+            val streams = json.parseToJsonElement(out).jsonObject["streams"]?.jsonArray
+                ?: return SourceCodecs(null, null, null)
+            val video = streams.firstOrNull { it.jsonObject["codec_type"]?.jsonPrimitive?.content == "video" }?.jsonObject
+            val audio = streams.firstOrNull { it.jsonObject["codec_type"]?.jsonPrimitive?.content == "audio" }?.jsonObject
+            SourceCodecs(
+                videoCodec = video?.get("codec_name")?.jsonPrimitive?.content,
+                pixFmt = video?.get("pix_fmt")?.jsonPrimitive?.content,
+                audioCodec = audio?.get("codec_name")?.jsonPrimitive?.content,
+            )
+        } catch (e: Exception) {
+            SourceCodecs(null, null, null)
+        }
+    }
+
+    /**
+     * Direct-play (stream-copy) is safe only for broadly hardware-decodable sources in an
+     * HLS-friendly container: H.264 8-bit (yuv420p) video, AAC or no audio, in mp4/m4v/mov.
+     * yuv444p (H.264 High 4:4:4) is excluded — most hardware decoders reject it.
+     */
+    private fun isDirectPlayEligible(inputPath: String, codecs: SourceCodecs): Boolean {
+        val ext = inputPath.substringAfterLast('.', "").lowercase()
+        return codecs.videoCodec == "h264" &&
+            codecs.pixFmt == "yuv420p" &&
+            codecs.audioCodec in setOf("aac", null) &&
+            ext in setOf("mp4", "m4v", "mov")
+    }
+
+    /**
+     * Direct-play remux: stream-copy the source into a single-rendition VOD media playlist
+     * (`playlist.m3u8` + `seg_*.ts`). No re-encode — near-instant, zero CPU, no quality loss.
+     * Only sound when [isDirectPlayEligible]. Drains merged stdout/stderr; throws on non-zero exit.
+     */
+    private suspend fun remux(inputPath: String, outDir: Path) {
+        withContext(Dispatchers.IO) {
+            Files.createDirectories(outDir)
+            val args = listOf(
+                ffmpegPath, "-y", "-i", inputPath,
+                "-map", "0:v:0", "-map", "0:a:0?",
+                "-c", "copy",
+                "-hls_time", "6",
+                "-hls_playlist_type", "vod",
+                "-hls_segment_filename", "seg_%03d.ts",
+                "playlist.m3u8",
+            )
+            // cwd = outDir so the media playlist lists bare relative segment names the flat /stream route serves.
+            val proc = ProcessBuilder(args)
+                .directory(outDir.toFile())
+                .redirectErrorStream(true)
+                .start()
+            val out = proc.inputStream.bufferedReader().readText()
+            if (proc.waitFor() != 0) {
+                error("ffmpeg remux failed for source $inputPath (exit ${proc.exitValue()}):\n${out.takeLast(2000)}")
+            }
         }
     }
 
