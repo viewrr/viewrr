@@ -68,11 +68,17 @@ class MediaScanner(
             val abs = file.toAbsolutePath().toString()
             if (abs in existingPaths) { skipped++; continue }
             val probe = ffprobe.probe(file)
+            val parsed = FilenameParser.parse(file.nameWithoutExtension)
             val now = Instant.now()
             val newId = suspendTransaction(db) {
                 MediaItems.insertAndGetId {
                     it[MediaItems.libraryId] = libraryId
                     it[MediaItems.title] = file.nameWithoutExtension
+                    it[MediaItems.cleanTitle] = parsed.cleanTitle
+                    it[MediaItems.showTitle] = parsed.showTitle
+                    it[MediaItems.seasonNumber] = parsed.seasonNumber
+                    it[MediaItems.episodeNumber] = parsed.episodeNumber
+                    it[MediaItems.year] = parsed.year?.toShort()
                     it[MediaItems.originalPath] = abs
                     it[MediaItems.durationSecs] = probe?.durationSecs
                     it[MediaItems.sizeBytes] = probe?.sizeBytes

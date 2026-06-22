@@ -38,6 +38,10 @@ object MediaItems : UUIDTable("media_items") {
     val sizeBytes = long("size_bytes").nullable()
     val mimeType = varchar("mime_type", 127).nullable()
     val year = short("year").nullable()
+    val cleanTitle = text("clean_title").nullable()
+    val showTitle = text("show_title").nullable()
+    val seasonNumber = integer("season_number").nullable()
+    val episodeNumber = integer("episode_number").nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 }
