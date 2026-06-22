@@ -56,7 +56,7 @@ class FakeUserRepository : UserRepository(dormantDb) {
         displayName: String?,
     ): UserRow {
         createCount++
-        val row = UserRow(UUID.randomUUID(), username, email, passwordHash, displayName, isAdmin = false)
+        val row = UserRow(UUID.randomUUID(), username, email, passwordHash, displayName, isAdmin = false, isActive = true, maxRating = null)
         byUsername[username.lowercase()] = row
         return row
     }

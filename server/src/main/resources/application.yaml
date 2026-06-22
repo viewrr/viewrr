@@ -18,6 +18,7 @@ ktor:
       - wtf.jobin.ServerOpenTelemetryKt.configureOpenTelemetry
       - wtf.jobin.plugins.StatusPagesKt.configureStatusPages
       - wtf.jobin.RoutingKt.configureRouting
+      - wtf.jobin.plugins.ApiDocsKt.configureApiDocs
 
 viewrr:
   env: "$VIEWRR_ENV:dev"

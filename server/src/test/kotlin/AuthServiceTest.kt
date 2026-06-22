@@ -24,7 +24,7 @@ class AuthServiceTest {
     @Test
     fun registerTakenUsernameThrowsUsernameTaken() = runBlocking {
         val users = FakeUserRepository().apply {
-            seed(UserRow(UUID.randomUUID(), "bob", "bob@example.com", "hash:pw", null, isAdmin = false))
+            seed(UserRow(UUID.randomUUID(), "bob", "bob@example.com", "hash:pw", null, isAdmin = false, isActive = true, maxRating = null))
         }
         val svc = AuthService(users, FakePasswordHasher(), FakeTokenService())
 
@@ -37,7 +37,7 @@ class AuthServiceTest {
     @Test
     fun loginWrongPasswordThrowsInvalidCredentials() = runBlocking {
         val users = FakeUserRepository().apply {
-            seed(UserRow(UUID.randomUUID(), "carol", "carol@example.com", "hash:secret", null, isAdmin = false))
+            seed(UserRow(UUID.randomUUID(), "carol", "carol@example.com", "hash:secret", null, isAdmin = false, isActive = true, maxRating = null))
         }
         val hasher = FakePasswordHasher(verifyResult = false)
         val svc = AuthService(users, hasher, FakeTokenService())

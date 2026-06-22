@@ -3,6 +3,7 @@ plugins {
     alias(ktorLibs.plugins.ktor)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlinx.rpc.grpc)
+    id("org.jetbrains.kotlinx.kover") version "0.9.1"
 }
 
 rpc {
@@ -50,6 +51,9 @@ dependencies {
     implementation(libs.postgresql)
     implementation(project(":core"))
     implementation(libs.double.receive)
+
+    // API docs: Ktor-native Swagger UI served from openapi/documentation.yaml
+    implementation("io.ktor:ktor-server-swagger:3.5.0")
 
     // Phase 2: Flyway over JDBC for migrations + R2DBC pool
     implementation("org.flywaydb:flyway-core:11.0.1")
