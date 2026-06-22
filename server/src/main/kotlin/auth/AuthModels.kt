@@ -26,6 +26,9 @@ data class PromoteRequest(val isAdmin: Boolean)
 data class SetActiveRequest(val active: Boolean)
 
 @Serializable
+data class SetMaxRatingRequest(val maxRating: String? = null)
+
+@Serializable
 data class UserView(
     val id: String,
     val username: String,
@@ -33,6 +36,7 @@ data class UserView(
     val displayName: String? = null,
     val isAdmin: Boolean,
     val isActive: Boolean,
+    val maxRating: String? = null,
 )
 
 fun UserRow.toView(): UserView = UserView(
@@ -42,4 +46,5 @@ fun UserRow.toView(): UserView = UserView(
     displayName = displayName,
     isAdmin = isAdmin,
     isActive = isActive,
+    maxRating = maxRating,
 )

@@ -17,6 +17,7 @@ object Users : UUIDTable("users") {
     val displayName = varchar("display_name", 255).nullable()
     val isAdmin = bool("is_admin").default(false)
     val isActive = bool("is_active").default(true)
+    val maxRating = varchar("max_rating", 16).nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 }
@@ -43,6 +44,7 @@ object MediaItems : UUIDTable("media_items") {
     val showTitle = text("show_title").nullable()
     val seasonNumber = integer("season_number").nullable()
     val episodeNumber = integer("episode_number").nullable()
+    val contentRating = varchar("content_rating", 16).nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 }

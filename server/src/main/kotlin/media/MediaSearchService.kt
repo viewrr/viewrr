@@ -9,6 +9,8 @@ import org.jetbrains.exposed.v1.core.TextColumnType
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import java.util.UUID
+import wtf.jobin.rating.isVisible
+import wtf.jobin.rating.maxRatingFor
 
 @Serializable
 data class MediaSearchHit(
@@ -17,6 +19,7 @@ data class MediaSearchHit(
     val hlsPath: String?,
     val durationSecs: Int?,
     val mimeType: String?,
+    val contentRating: String?,
 )
 
 /**
@@ -30,7 +33,7 @@ data class MediaSearchHit(
  */
 class MediaSearchService(private val db: R2dbcDatabase) {
 
-    suspend fun search(query: String, limit: Int): List<MediaSearchHit> {
+    suspend fun search(query: String, limit: Int, userId: UUID): List<MediaSearchHit> {
         require(query.isNotBlank()) { "q must not be blank" }
         require(limit > 0) { "limit must be positive" }
         // ponytail: no upper bound on limit; add a cap when search shows abuse.
@@ -40,12 +43,15 @@ class MediaSearchService(private val db: R2dbcDatabase) {
             IntegerColumnType() to limit,
         )
 
-        return suspendTransaction(db) {
+        val hits = suspendTransaction(db) {
             exec(SEARCH_SQL, args) { it.toHit() }
                 ?.toList()
                 ?.filterNotNull()
                 .orEmpty()
         }
+        // ponytail: filter in Kotlin over the limit-bounded result set.
+        val max = maxRatingFor(db, userId)
+        return hits.filter { isVisible(max, it.contentRating) }
     }
 
     private fun Row.toHit() = MediaSearchHit(
@@ -54,11 +60,12 @@ class MediaSearchService(private val db: R2dbcDatabase) {
         hlsPath = get("hls_path", String::class.java),
         durationSecs = get("duration_secs", Int::class.javaObjectType),
         mimeType = get("mime_type", String::class.java),
+        contentRating = get("content_rating", String::class.java),
     )
 
     private companion object {
         private val SEARCH_SQL = """
-            SELECT id, title, hls_path, duration_secs, mime_type, paradedb.score(id) AS score
+            SELECT id, title, hls_path, duration_secs, mime_type, content_rating, paradedb.score(id) AS score
             FROM media_items
             WHERE title @@@ ?
             ORDER BY score DESC
