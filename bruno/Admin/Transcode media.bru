@@ -1,0 +1,19 @@
+meta {
+  name: Transcode media
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/admin/media/{{mediaId}}/transcode
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {}
+}

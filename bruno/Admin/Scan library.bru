@@ -1,0 +1,19 @@
+meta {
+  name: Scan library
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/admin/libraries/{{libraryId}}/scan
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {}
+}

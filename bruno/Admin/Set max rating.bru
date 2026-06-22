@@ -1,0 +1,21 @@
+meta {
+  name: Set max rating
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/admin/users/{{userId}}/max-rating
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "maxRating": "PG-13"
+  }
+}

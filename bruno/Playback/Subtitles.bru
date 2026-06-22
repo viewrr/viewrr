@@ -1,0 +1,15 @@
+meta {
+  name: Subtitles
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/media/{{mediaId}}/subtitles
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

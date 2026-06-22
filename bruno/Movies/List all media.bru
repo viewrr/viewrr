@@ -1,0 +1,15 @@
+meta {
+  name: List all media
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/media?limit=200
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

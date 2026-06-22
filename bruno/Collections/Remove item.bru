@@ -1,0 +1,15 @@
+meta {
+  name: Remove item
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/collections/{{collectionId}}/items/{{mediaId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

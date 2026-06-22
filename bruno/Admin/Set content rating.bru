@@ -1,0 +1,21 @@
+meta {
+  name: Set content rating
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/admin/media/{{mediaId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "contentRating": "PG-13"
+  }
+}

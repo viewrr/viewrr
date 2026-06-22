@@ -1,0 +1,535 @@
+openapi: 3.0.3
+info:
+  title: viewrr API
+  version: "1.0.0"
+  description: |
+    Self-hosted OTT backend — movies, TV, and music.
+
+    **Auth:** call `POST /auth/login`, take `accessToken`, send it as `Authorization: Bearer <token>`
+    on every other endpoint. Access tokens expire in 15 minutes; use `POST /auth/refresh`.
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+  - url: "{publicBaseUrl}"
+    description: Deployment
+    variables:
+      publicBaseUrl:
+        default: http://localhost:8080
+tags:
+  - name: System
+  - name: Auth
+  - name: Movies
+  - name: Music
+  - name: Playback
+  - name: Collections
+  - name: Watch
+  - name: Admin
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: ok, content: { text/plain: { schema: { type: string, example: ok } } } }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "409": { description: username taken }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in, returns a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: invalid credentials }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a new pair (single-use, rotated)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: invalid refresh token }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke a refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
+      responses:
+        "204": { description: No Content }
+
+  /media:
+    get:
+      tags: [Movies]
+      summary: List all videos the caller can see (parental-filtered)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 200, minimum: 1, maximum: 1000 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/MediaListItem" } }
+        "401": { description: missing/expired token }
+  /media/search:
+    get:
+      tags: [Movies]
+      summary: Full-text (BM25) search over titles
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string }, description: query string }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/MediaSearchHit" } }
+        "400": { description: blank query }
+  /series:
+    get:
+      tags: [Movies]
+      summary: List TV shows (files named SxxExx) with episode/season counts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ShowView" } }
+  /series/{showTitle}:
+    get:
+      tags: [Movies]
+      summary: Episodes of a show grouped by season
+      parameters:
+        - { name: showTitle, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SeriesDetailView" } } } }
+        "404": { description: unknown show }
+  /me/continue-watching:
+    get:
+      tags: [Movies]
+      summary: In-progress videos for the current user (resume)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ContinueWatchingItem" } }
+  /me/recommendations:
+    get:
+      tags: [Movies]
+      summary: Pre-computed recommendations for the current user
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+
+  /stream/{media_id}/{file}:
+    get:
+      tags: [Playback]
+      summary: Serve an HLS playlist/segment (or vtt/jpg) for a video
+      description: "Fetch `playlist.m3u8` first, then the variant playlists and `.ts` segments it references. Range requests supported."
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: file, in: path, required: true, schema: { type: string }, example: playlist.m3u8 }
+      responses:
+        "200": { description: file bytes (m3u8 / ts / vtt / jpg) }
+        "404": { description: not found or blocked by parental rating }
+  /media/{media_id}/subtitles:
+    get:
+      tags: [Playback]
+      summary: List subtitle tracks (extracts embedded tracks to WebVTT on first call)
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SubtitleTrack" } }
+  /media/{media_id}/trickplay:
+    get:
+      tags: [Playback]
+      summary: Seek-preview sprite sheet + WebVTT (generated on first call)
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TrickplayInfo" } } } }
+        "404": { description: media missing or too short for trickplay }
+
+  /music/albums:
+    get:
+      tags: [Music]
+      summary: List all albums
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AlbumView" } }
+  /music/albums/{album}/tracks:
+    get:
+      tags: [Music]
+      summary: List tracks in an album (track-ordered)
+      parameters:
+        - { name: album, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/TrackView" } }
+        "404": { description: unknown album }
+  /music/tracks/{id}/audio:
+    get:
+      tags: [Music]
+      summary: Stream the original audio file (range supported)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: audio bytes }
+        "206": { description: partial content (range) }
+        "404": { description: track or file not found }
+
+  /collections:
+    get:
+      tags: [Collections]
+      summary: List the current user's collections
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CollectionView" } } } } }
+    post:
+      tags: [Collections]
+      summary: Create a collection
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionView" } } } }
+  /collections/{id}:
+    get:
+      tags: [Collections]
+      summary: Collection with its items
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionDetailView" } } } }
+        "404": { description: not found / not owner }
+    delete:
+      tags: [Collections]
+      summary: Delete a collection
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content }, "404": { description: not found } }
+  /collections/{id}/items:
+    post:
+      tags: [Collections]
+      summary: Add a media item to a collection
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [mediaId], properties: { mediaId: { type: string, format: uuid }, position: { type: integer, default: 0 } } } } }
+      responses: { "204": { description: No Content }, "404": { description: not found } }
+  /collections/{id}/items/{mediaId}:
+    delete:
+      tags: [Collections]
+      summary: Remove a media item from a collection
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mediaId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: No Content }, "404": { description: not found } }
+
+  /watch-events:
+    post:
+      tags: [Watch]
+      summary: Record a playback event (drives resume)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/WatchEvent" } } }
+      responses: { "201": { description: recorded }, "204": { description: recorded } }
+  /watch-events/me:
+    get:
+      tags: [Watch]
+      summary: Recent watch events for the current user
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+
+  /admin/libraries:
+    get:
+      tags: [Admin]
+      summary: List libraries
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LibraryView" } } } } } }
+    post:
+      tags: [Admin]
+      summary: Create a library (kind = movies | shows | music). Scans + (video) watches on create.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateLibraryRequest" } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/LibraryView" } } } } }
+  /admin/libraries/{id}:
+    patch:
+      tags: [Admin]
+      summary: Rename / enable-disable watching
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { name: { type: string }, watchEnabled: { type: boolean } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LibraryView" } } } } }
+    delete:
+      tags: [Admin]
+      summary: Delete a library
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content } }
+  /admin/libraries/{id}/scan:
+    post:
+      tags: [Admin]
+      summary: Trigger a re-scan
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScanResult" } } } } }
+  /admin/media/{id}/transcode:
+    post:
+      tags: [Admin]
+      summary: Trigger HLS transcode (or remux) of a media item
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { mediaId: { type: string }, hlsPath: { type: string } } } } } } }
+  /admin/media/{id}:
+    patch:
+      tags: [Admin]
+      summary: Set a media item's content rating (G | PG | PG-13 | R | NC-17 | null)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { contentRating: { type: string, nullable: true, example: PG-13 } } } } }
+      responses: { "204": { description: No Content }, "400": { description: invalid rating }, "404": { description: not found } }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/UserView" } } } } } }
+  /admin/users/{id}/promote:
+    post:
+      tags: [Admin]
+      summary: Set/clear admin
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [isAdmin], properties: { isAdmin: { type: boolean } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+  /admin/users/{id}/active:
+    post:
+      tags: [Admin]
+      summary: Enable / disable a user (disabled users can't log in)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [active], properties: { active: { type: boolean } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+  /admin/users/{id}/max-rating:
+    post:
+      tags: [Admin]
+      summary: Set a user's parental max rating (null = unrestricted)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { maxRating: { type: string, nullable: true, example: PG-13 } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+  /admin/users/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete a user (cannot delete yourself)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content }, "400": { description: self-delete }, "404": { description: not found } }
+  /admin/recs/refresh:
+    post:
+      tags: [Admin]
+      summary: Trigger a recommendations recompute (gRPC to the rec engine)
+      responses: { "200": { description: OK } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        displayName: { type: string, nullable: true }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, example: jobin }
+        password: { type: string, format: password, example: viewrr123 }
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+    MediaListItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        cleanTitle: { type: string, nullable: true }
+        showTitle: { type: string, nullable: true }
+        seasonNumber: { type: integer, nullable: true }
+        episodeNumber: { type: integer, nullable: true }
+        year: { type: integer, nullable: true }
+        durationSecs: { type: integer, nullable: true }
+        hlsPath: { type: string, nullable: true, description: "null = not yet transcoded" }
+        contentRating: { type: string, nullable: true }
+    MediaSearchHit:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: string, nullable: true }
+        durationSecs: { type: integer, nullable: true }
+        mimeType: { type: string, nullable: true }
+    ShowView:
+      type: object
+      properties:
+        showTitle: { type: string }
+        episodeCount: { type: integer }
+        seasonCount: { type: integer }
+    EpisodeView:
+      type: object
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        seasonNumber: { type: integer, nullable: true }
+        episodeNumber: { type: integer, nullable: true }
+        hlsPath: { type: string, nullable: true }
+    SeasonView:
+      type: object
+      properties:
+        season: { type: integer, nullable: true }
+        episodes: { type: array, items: { $ref: "#/components/schemas/EpisodeView" } }
+    SeriesDetailView:
+      type: object
+      properties:
+        showTitle: { type: string }
+        seasons: { type: array, items: { $ref: "#/components/schemas/SeasonView" } }
+    ContinueWatchingItem:
+      type: object
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: string, nullable: true }
+        durationSecs: { type: integer, nullable: true }
+        positionSecs: { type: integer }
+        percent: { type: integer }
+    SubtitleTrack:
+      type: object
+      properties:
+        index: { type: integer }
+        lang: { type: string, nullable: true }
+        label: { type: string, nullable: true }
+        url: { type: string }
+    TrickplayInfo:
+      type: object
+      properties:
+        spriteUrl: { type: string }
+        vttUrl: { type: string }
+        intervalSecs: { type: integer }
+        thumbW: { type: integer }
+        thumbH: { type: integer }
+        tileCols: { type: integer }
+    AlbumView:
+      type: object
+      properties:
+        album: { type: string }
+        trackCount: { type: integer }
+        artist: { type: string, nullable: true }
+    TrackView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        artist: { type: string, nullable: true }
+        album: { type: string, nullable: true }
+        trackNumber: { type: integer, nullable: true }
+        discNumber: { type: integer, nullable: true }
+        durationSecs: { type: integer, nullable: true }
+    CollectionView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string }
+    CollectionItemView:
+      type: object
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: string, nullable: true }
+        position: { type: integer }
+    CollectionDetailView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string }
+        items: { type: array, items: { $ref: "#/components/schemas/CollectionItemView" } }
+    WatchEvent:
+      type: object
+      required: [mediaId, positionSecs, eventType, sessionId]
+      properties:
+        mediaId: { type: string, format: uuid }
+        positionSecs: { type: integer }
+        eventType: { type: string, enum: [start, progress, pause, stop, finish] }
+        sessionId: { type: string, format: uuid }
+    LibraryView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [movies, shows, music] }
+        rootPath: { type: string }
+        watchEnabled: { type: boolean }
+        lastScannedAt: { type: string, nullable: true }
+        createdAt: { type: string }
+    CreateLibraryRequest:
+      type: object
+      required: [name, kind, rootPath]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [movies, shows, music] }
+        rootPath: { type: string }
+    ScanResult:
+      type: object
+      properties:
+        added: { type: integer }
+        removed: { type: integer }
+        skipped: { type: integer }
+    UserView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string }
+        displayName: { type: string, nullable: true }
+        isAdmin: { type: boolean }
+        isActive: { type: boolean }
+        maxRating: { type: string, nullable: true }

@@ -1,0 +1,15 @@
+meta {
+  name: Trickplay
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/media/{{mediaId}}/trickplay
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Create library
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/libraries
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Downloads",
+    "kind": "movies",
+    "rootPath": "/Users/jobinlawrance/Downloads"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) bru.setEnvVar("libraryId", res.getBody().id);
+}

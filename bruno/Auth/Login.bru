@@ -1,0 +1,25 @@
+meta {
+  name: Login
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "jobin",
+    "password": "viewrr123"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setEnvVar("token", res.getBody().accessToken);
+    bru.setEnvVar("refreshToken", res.getBody().refreshToken);
+  }
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Album tracks
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/music/albums/{{albumName}}/tracks
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

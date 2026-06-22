@@ -1,0 +1,15 @@
+meta {
+  name: HLS playlist
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/stream/{{mediaId}}/playlist.m3u8
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

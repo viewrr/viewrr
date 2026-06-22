@@ -1,0 +1,22 @@
+meta {
+  name: Add item
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/collections/{{collectionId}}/items
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "mediaId": "{{mediaId}}",
+    "position": 0
+  }
+}

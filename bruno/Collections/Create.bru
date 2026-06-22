@@ -1,0 +1,25 @@
+meta {
+  name: Create
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/collections
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Faves"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) bru.setEnvVar("collectionId", res.getBody().id);
+}
