@@ -23,7 +23,9 @@ import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
 import wtf.jobin.recs.adminRecsRoutes
 import wtf.jobin.recs.recsRoutes
+import wtf.jobin.watch.ContinueWatchingService
 import wtf.jobin.watch.WatchEventRepository
+import wtf.jobin.watch.continueWatchingRoutes
 import wtf.jobin.watch.watchEventRoutes
 import wtf.jobin.party.PartyHub
 import wtf.jobin.party.PartyRoomRepository
@@ -44,6 +46,7 @@ fun Application.configureRouting() {
     val recs by inject<RecsRepository>()
     val recEngine by inject<RecEngineClient>()
     val watchEvents by inject<WatchEventRepository>()
+    val continueWatching by inject<ContinueWatchingService>()
     val partyRooms by inject<PartyRoomRepository>()
     val db by inject<R2dbcDatabase>()
     val appConfig by inject<AppConfig>()
@@ -60,6 +63,7 @@ fun Application.configureRouting() {
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
         watchEventRoutes(watchEvents)
+        continueWatchingRoutes(continueWatching)
         partyRoomRoutes(partyRooms, partyHub)
         streamRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)
