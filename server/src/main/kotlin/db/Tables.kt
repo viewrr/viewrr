@@ -24,6 +24,8 @@ object Libraries : UUIDTable("libraries") {
     val name = varchar("name", 255)
     val kind = varchar("kind", 32)
     val rootPath = text("root_path").uniqueIndex()
+    val lastScannedAt = timestamp("last_scanned_at").nullable()
+    val watchEnabled = bool("watch_enabled").default(true)
     val createdAt = timestamp("created_at")
 }
 

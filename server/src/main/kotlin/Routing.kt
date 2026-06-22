@@ -13,7 +13,9 @@ import wtf.jobin.auth.authRoutes
 import wtf.jobin.media.MediaSearchService
 import wtf.jobin.media.mediaSearchRoutes
 import wtf.jobin.scanner.HlsTranscoder
+import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.MediaScanner
+import wtf.jobin.scanner.libraryRoutes
 import wtf.jobin.scanner.mediaRoutes
 import wtf.jobin.scanner.scannerRoutes
 import wtf.jobin.recs.RecEngineClient
@@ -35,6 +37,7 @@ fun Application.configureRouting() {
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
     val transcoder by inject<HlsTranscoder>()
+    val libraries by inject<LibraryRepository>()
     val mediaSearch by inject<MediaSearchService>()
     val recs by inject<RecsRepository>()
     val recEngine by inject<RecEngineClient>()
@@ -49,6 +52,7 @@ fun Application.configureRouting() {
         authRoutes(auth)
         adminUserRoutes(users)
         scannerRoutes(scanner)
+        libraryRoutes(libraries)
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         recsRoutes(recs)
