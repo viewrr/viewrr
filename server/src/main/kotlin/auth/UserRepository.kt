@@ -18,8 +18,8 @@ data class UserRow(
     val isAdmin: Boolean,
 )
 
-class UserRepository(private val db: R2dbcDatabase) {
-    suspend fun create(
+open class UserRepository(private val db: R2dbcDatabase) {
+    open suspend fun create(
         username: String,
         email: String,
         passwordHash: String,
@@ -37,7 +37,7 @@ class UserRepository(private val db: R2dbcDatabase) {
         UserRow(id.value, username, email, passwordHash, displayName, false)
     }
 
-    suspend fun findByUsername(username: String): UserRow? = suspendTransaction(db) {
+    open suspend fun findByUsername(username: String): UserRow? = suspendTransaction(db) {
         Users.selectAll()
             .where { Users.username.lowerCase() eq username.lowercase() }
             .map { it.toRow() }
