@@ -2,6 +2,7 @@ package wtf.jobin.streaming
 
 import io.ktor.http.*
 import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.http.content.*
 import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.plugins.partialcontent.*
@@ -41,13 +42,19 @@ fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media) {
                 } catch (_: IllegalArgumentException) {
                     throw NotFoundException()
                 }
-                // ponytail: one-shot column read; library_id is the only field we need.
-                val libraryId = suspendTransaction(db) {
+                // ponytail: one-shot column read; library_id + content_rating in one pass.
+                val row = suspendTransaction(db) {
                     MediaItems.selectAll()
                         .where { MediaItems.id eq mediaId }
-                        .map { it[MediaItems.libraryId].value }
+                        .map { it[MediaItems.libraryId].value to it[MediaItems.contentRating] }
                         .firstOrNull()
                 } ?: throw NotFoundException()
+                val (libraryId, contentRating) = row
+
+                // Parental gate: blocked media 404s — never leak its existence.
+                val uid = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
+                val max = wtf.jobin.rating.maxRatingFor(db, uid)
+                if (!wtf.jobin.rating.isVisible(max, contentRating)) throw NotFoundException()
 
                 val target = hlsRoot
                     .resolve(libraryId.toString())

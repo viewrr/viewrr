@@ -37,6 +37,14 @@ fun Route.adminUserRoutes(users: UserRepository) {
             val u = users.setActive(id, req.active) ?: throw NotFoundException()
             call.respond(u.toView())
         }
+        post("/admin/users/{id}/max-rating") {
+            call.assertAdmin()
+            val id = UUID.fromString(call.parameters["id"]!!)
+            val req = call.receive<SetMaxRatingRequest>()
+            if (!wtf.jobin.rating.isValidRating(req.maxRating)) throw IllegalArgumentException("invalid rating")
+            val u = users.setMaxRating(id, wtf.jobin.rating.normalizeRating(req.maxRating)) ?: throw NotFoundException()
+            call.respond(u.toView())
+        }
         delete("/admin/users/{id}") {
             call.assertAdmin()
             val id = UUID.fromString(call.parameters["id"]!!)

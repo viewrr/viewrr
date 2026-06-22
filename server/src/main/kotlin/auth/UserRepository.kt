@@ -18,6 +18,7 @@ data class UserRow(
     val displayName: String?,
     val isAdmin: Boolean,
     val isActive: Boolean,
+    val maxRating: String?,
 )
 
 open class UserRepository(private val db: R2dbcDatabase) {
@@ -36,7 +37,7 @@ open class UserRepository(private val db: R2dbcDatabase) {
             it[Users.createdAt] = now
             it[Users.updatedAt] = now
         }
-        UserRow(id.value, username, email, passwordHash, displayName, false, true)
+        UserRow(id.value, username, email, passwordHash, displayName, false, true, null)
     }
 
     open suspend fun findByUsername(username: String): UserRow? = suspendTransaction(db) {
@@ -90,6 +91,21 @@ open class UserRepository(private val db: R2dbcDatabase) {
         }
     }
 
+    suspend fun setMaxRating(id: UUID, maxRating: String?): UserRow? = suspendTransaction(db) {
+        val updated = Users.update({ Users.id eq id }) {
+            it[Users.maxRating] = maxRating
+            it[Users.updatedAt] = Instant.now()
+        }
+        if (updated == 0) {
+            null
+        } else {
+            Users.selectAll()
+                .where { Users.id eq id }
+                .map { it.toRow() }
+                .firstOrNull()
+        }
+    }
+
     suspend fun delete(id: UUID): Boolean = suspendTransaction(db) {
         Users.deleteWhere { Users.id eq id } > 0
     }
@@ -102,5 +118,6 @@ open class UserRepository(private val db: R2dbcDatabase) {
         displayName = this[Users.displayName],
         isAdmin = this[Users.isAdmin],
         isActive = this[Users.isActive],
+        maxRating = this[Users.maxRating],
     )
 }

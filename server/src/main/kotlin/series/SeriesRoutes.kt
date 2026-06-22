@@ -1,6 +1,8 @@
 package wtf.jobin.series
 
 import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
+import java.util.UUID
 import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -29,14 +31,18 @@ fun Route.seriesRoutes(db: R2dbcDatabase) {
     val repo = SeriesRepository(db)
     authenticate("auth-jwt") {
         get("/series") {
+            val uid = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
+            val max = wtf.jobin.rating.maxRatingFor(db, uid)
             call.respond(
-                repo.shows().map { ShowView(it.showTitle, it.episodeCount, it.seasonCount) },
+                repo.shows(max).map { ShowView(it.showTitle, it.episodeCount, it.seasonCount) },
             )
         }
         get("/series/{showTitle}") {
             // Ktor auto-url-decodes the path param.
             val name = call.parameters["showTitle"]!!
-            val episodes = repo.episodes(name)
+            val uid = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
+            val max = wtf.jobin.rating.maxRatingFor(db, uid)
+            val episodes = repo.episodes(name, max)
             if (episodes.isEmpty()) throw NotFoundException()
             val seasons = episodes
                 .groupBy { it.seasonNumber }

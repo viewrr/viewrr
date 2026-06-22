@@ -18,6 +18,7 @@ import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.libraryRoutes
 import wtf.jobin.scanner.mediaRoutes
+import wtf.jobin.scanner.mediaAdminRoutes
 import wtf.jobin.scanner.scannerRoutes
 import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
@@ -78,6 +79,7 @@ fun Application.configureRouting() {
         downloadRoutes(downloads, appConfig.publicBaseUrl)
         collectionRoutes(collections)
         seriesRoutes(db)
+        mediaAdminRoutes(db)
     }
     partyHub.startFlushLoop(this)
 }

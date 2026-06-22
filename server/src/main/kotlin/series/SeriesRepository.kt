@@ -1,6 +1,7 @@
 package wtf.jobin.series
 
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
@@ -26,10 +27,11 @@ data class EpisodeRow(
 class SeriesRepository(private val db: R2dbcDatabase) {
 
     // ponytail: in-memory grouping (library is small; switch to SQL GROUP BY if it ever isn't).
-    suspend fun shows(): List<ShowSummary> = suspendTransaction(db) {
+    suspend fun shows(maxRating: String?): List<ShowSummary> = suspendTransaction(db) {
         MediaItems
-            .select(MediaItems.showTitle, MediaItems.seasonNumber)
+            .select(MediaItems.showTitle, MediaItems.seasonNumber, MediaItems.contentRating)
             .where { MediaItems.showTitle.isNotNull() }
+            .filter { wtf.jobin.rating.isVisible(maxRating, it[MediaItems.contentRating]) }
             .map { it[MediaItems.showTitle]!! to it[MediaItems.seasonNumber] }
             .toList()
             .groupBy({ it.first }, { it.second })
@@ -43,7 +45,7 @@ class SeriesRepository(private val db: R2dbcDatabase) {
             .sortedBy { it.showTitle }
     }
 
-    suspend fun episodes(showTitle: String): List<EpisodeRow> = suspendTransaction(db) {
+    suspend fun episodes(showTitle: String, maxRating: String?): List<EpisodeRow> = suspendTransaction(db) {
         MediaItems
             .select(
                 MediaItems.id,
@@ -52,12 +54,14 @@ class SeriesRepository(private val db: R2dbcDatabase) {
                 MediaItems.seasonNumber,
                 MediaItems.episodeNumber,
                 MediaItems.hlsPath,
+                MediaItems.contentRating,
             )
             .where { MediaItems.showTitle eq showTitle }
             .orderBy(
                 MediaItems.seasonNumber to SortOrder.ASC,
                 MediaItems.episodeNumber to SortOrder.ASC,
             )
+            .filter { wtf.jobin.rating.isVisible(maxRating, it[MediaItems.contentRating]) }
             .map {
                 EpisodeRow(
                     mediaId = it[MediaItems.id].value,
