@@ -40,6 +40,7 @@ val redisModule = module {
     single<RedisAsyncCommands<String, String>>(createdAtStart = true) {
         get<RedisClient>().connect().async()
     }
+    single { wtf.jobin.stremio.StremioKeys(get<RedisAsyncCommands<String, String>>()) }
 }
 
 val authModule = module {

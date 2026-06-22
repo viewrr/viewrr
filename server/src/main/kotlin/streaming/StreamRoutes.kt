@@ -24,13 +24,14 @@ import java.util.UUID
 private val M3U8_CT = ContentType.parse("application/vnd.apple.mpegurl")
 private val TS_CT = ContentType.parse("video/mp2t")
 
-fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media) {
+fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media, stremioKeys: wtf.jobin.stremio.StremioKeys) {
     val hlsRoot = Path.of(media.hlsRoot)
     route("/stream") {
         // PartialContent gives us Range support transparently; LocalFileContent on Netty
         // still serves both full and ranged responses via DefaultFileRegion (zero-copy).
         install(PartialContent)
-        authenticate("auth-jwt") {
+        // optional JWT: browser/app clients send Bearer; Stremio addon clients pass ?key=
+        authenticate("auth-jwt", optional = true) {
             get("/{media_id}/{file}") {
                 val file = call.parameters["file"]!!
                 // Path traversal guard: any separator or parent ref → 404 (don't leak).
@@ -52,7 +53,10 @@ fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media) {
                 val (libraryId, contentRating) = row
 
                 // Parental gate: blocked media 404s — never leak its existence.
-                val uid = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
+                // Caller is either a JWT user or a Stremio addon key holder.
+                val uid = call.principal<JWTPrincipal>()?.subject?.let { UUID.fromString(it) }
+                    ?: call.request.queryParameters["key"]?.let { stremioKeys.resolve(it) }
+                    ?: throw NotFoundException()
                 val max = wtf.jobin.rating.maxRatingFor(db, uid)
                 if (!wtf.jobin.rating.isVisible(max, contentRating)) throw NotFoundException()
 
