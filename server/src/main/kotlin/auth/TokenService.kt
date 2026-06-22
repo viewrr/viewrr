@@ -15,7 +15,7 @@ import java.util.UUID
 private const val CONSUME_REFRESH_LUA =
     "local v=redis.call('GET',KEYS[1]); if v then redis.call('DEL',KEYS[1]) end; return v"
 
-class TokenService(
+open class TokenService(
     private val cfg: AppConfig.Auth,
     private val redis: RedisAsyncCommands<String, String>,
 ) {
@@ -23,7 +23,7 @@ class TokenService(
     private val rng = SecureRandom()
     private val b64 = Base64.getUrlEncoder().withoutPadding()
 
-    fun issueAccess(userId: UUID, isAdmin: Boolean): String {
+    open fun issueAccess(userId: UUID, isAdmin: Boolean): String {
         val now = System.currentTimeMillis()
         return JWT.create()
             .withIssuer(cfg.jwtIssuer)
@@ -35,7 +35,7 @@ class TokenService(
             .sign(algo)
     }
 
-    suspend fun issueRefresh(userId: UUID): String {
+    open suspend fun issueRefresh(userId: UUID): String {
         val bytes = ByteArray(32).also(rng::nextBytes)
         val token = b64.encodeToString(bytes)
         redis.set(
