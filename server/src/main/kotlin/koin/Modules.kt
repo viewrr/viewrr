@@ -22,6 +22,7 @@ import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.Mp4Downloader
+import wtf.jobin.watch.ContinueWatchingService
 import wtf.jobin.watch.WatchEventRepository
 
 val dbModule = module {
@@ -65,6 +66,7 @@ val recsModule = module {
 
 val watchModule = module {
     single { WatchEventRepository(get()) }
+    single { ContinueWatchingService(get()) }
 }
 
 val partyModule = module {
