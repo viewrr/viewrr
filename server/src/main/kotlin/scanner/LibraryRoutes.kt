@@ -8,6 +8,7 @@ import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.nio.file.Path
@@ -26,7 +27,7 @@ data class PatchLibraryRequest(
     val watchEnabled: Boolean? = null,
 )
 
-fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher) {
+fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher, scanner: MediaScanner) {
     authenticate("auth-jwt") {
         route("/admin/libraries") {
 
@@ -41,6 +42,8 @@ fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher) {
                 if (!Files.isReadable(path)) throw IllegalArgumentException("rootPath is not readable: ${body.rootPath}")
                 val row = repo.create(body.name, body.kind, path.toAbsolutePath().toString())
                 if (row.watchEnabled) watcher.watch(row.id, Path.of(row.rootPath))
+                // Index files already on disk now; watcher only catches future events.
+                call.application.launch { runCatching { scanner.scan(row.id) } }
                 call.respond(HttpStatusCode.Created, row.toView())
             }
 
@@ -56,7 +59,11 @@ fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher) {
                 if (body.name != null && body.name.isBlank()) throw IllegalArgumentException("name cannot be blank")
                 val updated = repo.patch(id, body.name, body.watchEnabled) ?: throw NotFoundException()
                 when (body.watchEnabled) {
-                    true -> watcher.watch(updated.id, Path.of(updated.rootPath))
+                    true -> {
+                        watcher.watch(updated.id, Path.of(updated.rootPath))
+                        // Catch up on anything added while watch was off.
+                        call.application.launch { runCatching { scanner.scan(updated.id) } }
+                    }
                     false -> watcher.unwatch(updated.id)
                     null -> {}
                 }

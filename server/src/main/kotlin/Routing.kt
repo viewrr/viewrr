@@ -57,7 +57,7 @@ fun Application.configureRouting() {
         authRoutes(auth)
         adminUserRoutes(users)
         scannerRoutes(scanner)
-        libraryRoutes(libraries, libraryWatcher)
+        libraryRoutes(libraries, libraryWatcher, scanner)
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         recsRoutes(recs)
