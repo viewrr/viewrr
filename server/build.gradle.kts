@@ -1,9 +1,12 @@
+import java.net.URI
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(ktorLibs.plugins.ktor)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlinx.rpc.grpc)
     id("org.jetbrains.kotlinx.kover") version "0.9.1"
+    id("com.google.cloud.tools.jib") version "3.4.4"
 }
 
 rpc {
@@ -72,4 +75,76 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
+}
+
+// --- Container image via Jib (daemon-less, Gradle-cached) ---
+// Jib's base JRE has no ffmpeg; the app shells out to ffmpeg/ffprobe, so we layer
+// static linux binaries into the image via extraDirectories and point the app at them.
+val jibBinDir = layout.buildDirectory.dir("jib-extra/usr/local/bin")
+
+val stageFfmpeg by tasks.registering {
+    description = "Fetch static linux ffmpeg/ffprobe for the Jib image layer"
+    val outDir = jibBinDir
+    outputs.dir(outDir)
+    outputs.cacheIf { true }
+    doLast {
+        val dir = outDir.get().asFile
+        dir.mkdirs()
+        val ffmpeg = dir.resolve("ffmpeg")
+        val ffprobe = dir.resolve("ffprobe")
+        if (ffmpeg.exists() && ffprobe.exists()) return@doLast
+        val url =
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+        val tarball = layout.buildDirectory.file("ffmpeg-dl.tar.xz").get().asFile
+        val bytes = URI(url).toURL().openStream().use { it.readBytes() }
+        tarball.writeBytes(bytes)
+        val work = layout.buildDirectory.dir("ffmpeg-extract").get().asFile
+        work.deleteRecursively(); work.mkdirs()
+        val proc = ProcessBuilder("tar", "-xf", tarball.absolutePath, "-C", work.absolutePath)
+            .redirectErrorStream(true).start()
+        check(proc.waitFor() == 0) { "tar extraction of ffmpeg failed" }
+        for (name in listOf("ffmpeg", "ffprobe")) {
+            val src = work.walkTopDown().first { it.name == name && it.parentFile?.name == "bin" }
+            src.copyTo(dir.resolve(name), overwrite = true).setExecutable(true)
+        }
+    }
+}
+
+jib {
+    from {
+        image = "eclipse-temurin:21-jre-jammy"
+        platforms {
+            platform {
+                architecture = "amd64"
+                os = "linux"
+            }
+        }
+    }
+    to {
+        image = "ghcr.io/viewrr/viewrr"
+    }
+    container {
+        mainClass = "io.ktor.server.netty.EngineMain"
+        ports = listOf("8080")
+        environment = mapOf(
+            "FFMPEG_PATH" to "/usr/local/bin/ffmpeg",
+            "FFPROBE_PATH" to "/usr/local/bin/ffprobe",
+        )
+    }
+    extraDirectories {
+        paths {
+            path {
+                setFrom(layout.buildDirectory.dir("jib-extra"))
+                into = "/"
+            }
+        }
+        permissions = mapOf(
+            "/usr/local/bin/ffmpeg" to "755",
+            "/usr/local/bin/ffprobe" to "755",
+        )
+    }
+}
+
+tasks.matching { it.name in listOf("jib", "jibDockerBuild", "jibBuildTar") }.configureEach {
+    dependsOn(stageFfmpeg)
 }
