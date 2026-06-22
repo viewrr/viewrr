@@ -59,6 +59,7 @@ fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media) {
                 val ct = when (file.substringAfterLast('.', "").lowercase()) {
                     "m3u8" -> M3U8_CT
                     "ts" -> TS_CT
+                    "vtt" -> ContentType.parse("text/vtt")
                     else -> ContentType.Application.OctetStream
                 }
                 call.respond(LocalFileContent(target.toFile(), contentType = ct))

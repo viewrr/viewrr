@@ -31,6 +31,7 @@ import wtf.jobin.party.PartyHub
 import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.party.partyRoomRoutes
 import wtf.jobin.streaming.streamRoutes
+import wtf.jobin.streaming.subtitleRoutes
 import wtf.jobin.party.partyWebSocketRoutes
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.downloadRoutes
@@ -66,6 +67,7 @@ fun Application.configureRouting() {
         continueWatchingRoutes(continueWatching)
         partyRoomRoutes(partyRooms, partyHub)
         streamRoutes(db, appConfig.media)
+        subtitleRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)
         downloadRoutes(downloads, appConfig.publicBaseUrl)
     }
