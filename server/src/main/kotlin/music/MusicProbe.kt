@@ -26,7 +26,7 @@ class MusicProbe(private val binaryPath: String) {
     suspend fun probe(file: Path): MusicMeta? = withContext(Dispatchers.IO) {
         val proc = ProcessBuilder(
             binaryPath, "-v", "error",
-            "-show_entries", "format=duration:format_tags=title,artist,album,album_artist,track,disc",
+            "-show_entries", "format=duration:format_tags",
             "-of", "json", file.toAbsolutePath().toString(),
         ).redirectErrorStream(true).start()
         val out = proc.inputStream.bufferedReader().readText()
@@ -36,19 +36,24 @@ class MusicProbe(private val binaryPath: String) {
             ?: return@withContext null
         val tags = format["tags"]?.jsonObject
 
-        fun tag(key: String): String? =
-            tags?.get(key)?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+        // Tag key casing/naming varies by container (FLAC Vorbis uses TITLE/ARTIST/ALBUM,
+        // album_artist vs albumartist, track vs tracknumber). Fetch all tags, match case-insensitively.
+        val lc: Map<String, String> = tags?.entries
+            ?.mapNotNull { (k, v) -> v.jsonPrimitive.content.takeIf { it.isNotBlank() }?.let { k.lowercase() to it } }
+            ?.toMap()
+            ?: emptyMap()
+        fun tag(vararg keys: String): String? = keys.firstNotNullOfOrNull { lc[it] }
         // track/disc tags arrive as "3" or "3/12" — keep the part before the slash.
-        fun tagInt(key: String): Int? = tag(key)?.substringBefore('/')?.trim()?.toIntOrNull()
+        fun tagInt(vararg keys: String): Int? = tag(*keys)?.substringBefore('/')?.trim()?.toIntOrNull()
 
         MusicMeta(
             durationSecs = format["duration"]?.jsonPrimitive?.content?.toDoubleOrNull()?.roundToInt(),
             title = tag("title"),
             artist = tag("artist"),
             album = tag("album"),
-            albumArtist = tag("album_artist"),
-            trackNumber = tagInt("track"),
-            discNumber = tagInt("disc"),
+            albumArtist = tag("albumartist", "album_artist"),
+            trackNumber = tagInt("track", "tracknumber"),
+            discNumber = tagInt("disc", "discnumber"),
             mimeType = guessMime(file),
         )
     }
