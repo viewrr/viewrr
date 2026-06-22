@@ -109,6 +109,10 @@ class HlsTranscoder(
 
     private fun runFfmpeg(inputPath: String, outDir: Path, r: Rendition, mediaId: UUID) {
         val args = mutableListOf(ffmpegPath, "-y", "-i", inputPath)
+        // Map only video + first audio. Without this, ffmpeg's default selection also pulls an
+        // embedded subtitle stream into every rendition, littering the dir with stray v*_vtt.m3u8.
+        // Subtitles are handled separately by SubtitleExtractor. ponytail: single audio track only.
+        args += listOf("-map", "0:v:0", "-map", "0:a:0?")
         if (r.scaleFilter != null) args += listOf("-vf", r.scaleFilter)
         args += listOf(
             "-c:v", "libx264",
