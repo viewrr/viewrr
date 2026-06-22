@@ -18,6 +18,7 @@ import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.scanner.Ffprobe
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
+import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.Mp4Downloader
@@ -48,6 +49,8 @@ val scannerModule = module {
     single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.hlsRoot) }
     single { MediaScanner(get(), get(), get()) }
     single { LibraryRepository(get()) }
+    // Eager so the watcher is ready before #35 wires start() at boot.
+    single(createdAtStart = true) { LibraryWatcher(get()) }
 }
 
 val mediaModule = module {
