@@ -13,6 +13,7 @@ import wtf.jobin.auth.authRoutes
 import wtf.jobin.media.MediaSearchService
 import wtf.jobin.music.MusicScanner
 import wtf.jobin.music.musicRoutes
+import wtf.jobin.media.mediaListRoutes
 import wtf.jobin.media.mediaSearchRoutes
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
@@ -70,6 +71,7 @@ fun Application.configureRouting() {
         libraryRoutes(libraries, libraryWatcher, scanner, musicScanner)
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
+        mediaListRoutes(db)
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
         watchEventRoutes(watchEvents)
