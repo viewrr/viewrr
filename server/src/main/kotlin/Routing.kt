@@ -35,6 +35,8 @@ import wtf.jobin.streaming.subtitleRoutes
 import wtf.jobin.party.partyWebSocketRoutes
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.downloadRoutes
+import wtf.jobin.collection.CollectionRepository
+import wtf.jobin.collection.collectionRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -53,6 +55,7 @@ fun Application.configureRouting() {
     val appConfig by inject<AppConfig>()
     val partyHub by inject<PartyHub>()
     val downloads by inject<DownloadService>()
+    val collections by inject<CollectionRepository>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -70,6 +73,7 @@ fun Application.configureRouting() {
         subtitleRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)
         downloadRoutes(downloads, appConfig.publicBaseUrl)
+        collectionRoutes(collections)
     }
     partyHub.startFlushLoop(this)
 }
