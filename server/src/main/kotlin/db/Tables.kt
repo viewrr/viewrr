@@ -16,6 +16,7 @@ object Users : UUIDTable("users") {
     val passwordHash = text("password_hash")
     val displayName = varchar("display_name", 255).nullable()
     val isAdmin = bool("is_admin").default(false)
+    val isActive = bool("is_active").default(true)
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 }

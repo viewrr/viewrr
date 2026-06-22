@@ -33,7 +33,8 @@ class AuthService(
         // take ~the same wall time (no username-enumeration timing oracle).
         val hashToCheck = user?.passwordHash ?: dummyHash
         val ok = hasher.verify(hashToCheck, req.password.toCharArray())
-        if (user == null || !ok) throw AuthError.InvalidCredentials()
+        // ponytail: disabled users reuse InvalidCredentials — no separate code, no enumeration.
+        if (user == null || !ok || !user.isActive) throw AuthError.InvalidCredentials()
         return TokenPair(tokens.issueAccess(user.id, user.isAdmin), tokens.issueRefresh(user.id))
     }
 

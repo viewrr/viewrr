@@ -23,12 +23,16 @@ data class TokenPair(val accessToken: String, val refreshToken: String)
 data class PromoteRequest(val isAdmin: Boolean)
 
 @Serializable
+data class SetActiveRequest(val active: Boolean)
+
+@Serializable
 data class UserView(
     val id: String,
     val username: String,
     val email: String,
     val displayName: String? = null,
     val isAdmin: Boolean,
+    val isActive: Boolean,
 )
 
 fun UserRow.toView(): UserView = UserView(
@@ -37,4 +41,5 @@ fun UserRow.toView(): UserView = UserView(
     email = email,
     displayName = displayName,
     isAdmin = isAdmin,
+    isActive = isActive,
 )

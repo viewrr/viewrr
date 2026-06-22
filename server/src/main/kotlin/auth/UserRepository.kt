@@ -2,6 +2,7 @@ package wtf.jobin.auth
 
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
@@ -16,6 +17,7 @@ data class UserRow(
     val passwordHash: String,
     val displayName: String?,
     val isAdmin: Boolean,
+    val isActive: Boolean,
 )
 
 open class UserRepository(private val db: R2dbcDatabase) {
@@ -34,7 +36,7 @@ open class UserRepository(private val db: R2dbcDatabase) {
             it[Users.createdAt] = now
             it[Users.updatedAt] = now
         }
-        UserRow(id.value, username, email, passwordHash, displayName, false)
+        UserRow(id.value, username, email, passwordHash, displayName, false, true)
     }
 
     open suspend fun findByUsername(username: String): UserRow? = suspendTransaction(db) {
@@ -66,6 +68,32 @@ open class UserRepository(private val db: R2dbcDatabase) {
         }
     }
 
+    open suspend fun list(): List<UserRow> = suspendTransaction(db) {
+        Users.selectAll()
+            .orderBy(Users.createdAt to SortOrder.ASC)
+            .map { it.toRow() }
+            .toList()
+    }
+
+    suspend fun setActive(id: UUID, active: Boolean): UserRow? = suspendTransaction(db) {
+        val updated = Users.update({ Users.id eq id }) {
+            it[Users.isActive] = active
+            it[Users.updatedAt] = Instant.now()
+        }
+        if (updated == 0) {
+            null
+        } else {
+            Users.selectAll()
+                .where { Users.id eq id }
+                .map { it.toRow() }
+                .firstOrNull()
+        }
+    }
+
+    suspend fun delete(id: UUID): Boolean = suspendTransaction(db) {
+        Users.deleteWhere { Users.id eq id } > 0
+    }
+
     private fun ResultRow.toRow() = UserRow(
         id = this[Users.id].value,
         username = this[Users.username],
@@ -73,5 +101,6 @@ open class UserRepository(private val db: R2dbcDatabase) {
         passwordHash = this[Users.passwordHash],
         displayName = this[Users.displayName],
         isAdmin = this[Users.isAdmin],
+        isActive = this[Users.isActive],
     )
 }
