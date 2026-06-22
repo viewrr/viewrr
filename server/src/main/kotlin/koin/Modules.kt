@@ -47,7 +47,7 @@ val authModule = module {
 
 val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
-    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.hlsRoot) }
+    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot) }
     single { MediaScanner(get(), get(), get()) }
     single { LibraryRepository(get()) }
     // Eager so the watcher is ready before #35 wires start() at boot.
