@@ -22,7 +22,6 @@ import java.util.UUID
 import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 
-private val MEDIA_EXTS = setOf("mp4", "m4v", "mkv", "webm", "mov", "avi", "ts")
 private val log = LoggerFactory.getLogger("wtf.jobin.scanner.MediaScanner")
 
 @Serializable
