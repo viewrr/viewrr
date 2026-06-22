@@ -38,6 +38,7 @@ import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.downloadRoutes
 import wtf.jobin.collection.CollectionRepository
 import wtf.jobin.collection.collectionRoutes
+import wtf.jobin.series.seriesRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -76,6 +77,7 @@ fun Application.configureRouting() {
         partyWebSocketRoutes(partyHub, db)
         downloadRoutes(downloads, appConfig.publicBaseUrl)
         collectionRoutes(collections)
+        seriesRoutes(db)
     }
     partyHub.startFlushLoop(this)
 }
