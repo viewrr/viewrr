@@ -14,6 +14,7 @@ import wtf.jobin.media.MediaSearchService
 import wtf.jobin.media.mediaSearchRoutes
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
+import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.libraryRoutes
 import wtf.jobin.scanner.mediaRoutes
@@ -38,6 +39,7 @@ fun Application.configureRouting() {
     val scanner by inject<MediaScanner>()
     val transcoder by inject<HlsTranscoder>()
     val libraries by inject<LibraryRepository>()
+    val libraryWatcher by inject<LibraryWatcher>()
     val mediaSearch by inject<MediaSearchService>()
     val recs by inject<RecsRepository>()
     val recEngine by inject<RecEngineClient>()
@@ -52,7 +54,7 @@ fun Application.configureRouting() {
         authRoutes(auth)
         adminUserRoutes(users)
         scannerRoutes(scanner)
-        libraryRoutes(libraries)
+        libraryRoutes(libraries, libraryWatcher)
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         recsRoutes(recs)

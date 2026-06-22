@@ -101,6 +101,12 @@ class MediaScanner(
             }
         }
 
+        suspendTransaction(db) {
+            Libraries.update({ Libraries.id eq libraryId }) {
+                it[Libraries.lastScannedAt] = Instant.now()
+            }
+        }
+
         return ScanResult(added, removed, skipped)
     }
 }
