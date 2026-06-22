@@ -1,0 +1,12 @@
+.git
+.github
+.gradle
+**/build
+*.iml
+.idea
+docs
+bruno
+*.md
+.DS_Store
+h2.mv.db
+**/h2.mv.db
