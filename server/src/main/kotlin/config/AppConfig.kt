@@ -9,6 +9,7 @@ data class AppConfig(
     val media: Media,
     val cors: Cors,
     val recs: Recs,
+    val scanner: Scanner,
     val env: String,
     val publicBaseUrl: String,
 ) {
@@ -42,6 +43,8 @@ data class AppConfig(
 
     data class Recs(val grpcTarget: String)
 
+    data class Scanner(val fallbackIntervalMinutes: Long)
+
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
             db = Db(
@@ -74,6 +77,10 @@ data class AppConfig(
             recs = Recs(
                 grpcTarget = env.config.propertyOrNull("viewrr.recs.grpcTarget")?.getString()
                     ?: "localhost:50051",
+            ),
+            scanner = Scanner(
+                fallbackIntervalMinutes = env.config.propertyOrNull("viewrr.scanner.fallbackIntervalMinutes")
+                    ?.getString()?.toLong() ?: 15,
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()

@@ -26,7 +26,7 @@ data class PatchLibraryRequest(
     val watchEnabled: Boolean? = null,
 )
 
-fun Route.libraryRoutes(repo: LibraryRepository) {
+fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher) {
     authenticate("auth-jwt") {
         route("/admin/libraries") {
 
@@ -40,6 +40,7 @@ fun Route.libraryRoutes(repo: LibraryRepository) {
                 if (!Files.isDirectory(path)) throw IllegalArgumentException("rootPath is not a directory: ${body.rootPath}")
                 if (!Files.isReadable(path)) throw IllegalArgumentException("rootPath is not readable: ${body.rootPath}")
                 val row = repo.create(body.name, body.kind, path.toAbsolutePath().toString())
+                if (row.watchEnabled) watcher.watch(row.id, Path.of(row.rootPath))
                 call.respond(HttpStatusCode.Created, row.toView())
             }
 
@@ -54,12 +55,18 @@ fun Route.libraryRoutes(repo: LibraryRepository) {
                 val body = call.receive<PatchLibraryRequest>()
                 if (body.name != null && body.name.isBlank()) throw IllegalArgumentException("name cannot be blank")
                 val updated = repo.patch(id, body.name, body.watchEnabled) ?: throw NotFoundException()
+                when (body.watchEnabled) {
+                    true -> watcher.watch(updated.id, Path.of(updated.rootPath))
+                    false -> watcher.unwatch(updated.id)
+                    null -> {}
+                }
                 call.respond(updated.toView())
             }
 
             delete("/{id}") {
                 call.requireAdmin()
                 val id = UUID.fromString(call.parameters["id"]!!)
+                watcher.unwatch(id)
                 if (!repo.delete(id)) throw NotFoundException()
                 call.respond(HttpStatusCode.NoContent)
             }
