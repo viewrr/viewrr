@@ -59,6 +59,8 @@ val scannerModule = module {
     single { LibraryRepository(get()) }
     // Eager so the watcher is ready before #35 wires start() at boot.
     single(createdAtStart = true) { LibraryWatcher(get()) }
+    // Phase 14 (#69/#73): node enrollment + token auth.
+    single { wtf.jobin.cluster.NodeRegistry(get(), get<AppConfig>().cluster.enrollmentSecret) }
 }
 
 val mediaModule = module {

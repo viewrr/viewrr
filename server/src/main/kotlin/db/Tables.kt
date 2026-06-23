@@ -33,6 +33,7 @@ object Nodes : UUIDTable("nodes") {
     val name = text("name")
     val meshAddress = text("mesh_address").nullable()
     val clientAddress = text("client_address").nullable()
+    val tokenHash = text("token_hash").nullable() // Phase 14 (#73): sha256 of per-node token
     val lastSeenAt = timestamp("last_seen_at").nullable()
     val createdAt = timestamp("created_at")
 }

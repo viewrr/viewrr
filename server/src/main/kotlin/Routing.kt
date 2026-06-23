@@ -46,6 +46,8 @@ import wtf.jobin.collection.collectionRoutes
 import wtf.jobin.series.seriesRoutes
 import wtf.jobin.stremio.StremioKeys
 import wtf.jobin.stremio.stremioRoutes
+import wtf.jobin.cluster.NodeRegistry
+import wtf.jobin.cluster.agentRoutes
 
 fun Application.configureRouting() {
     val auth by inject<AuthService>()
@@ -68,6 +70,7 @@ fun Application.configureRouting() {
     val downloads by inject<DownloadService>()
     val collections by inject<CollectionRepository>()
     val stremioKeys by inject<StremioKeys>()
+    val nodeRegistry by inject<NodeRegistry>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -91,6 +94,7 @@ fun Application.configureRouting() {
         seriesRoutes(db)
         musicRoutes(db)
         mediaAdminRoutes(db, tmdb)
+        agentRoutes(nodeRegistry)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
     }
     partyHub.startFlushLoop(this)

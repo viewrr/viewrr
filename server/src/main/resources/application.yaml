@@ -54,3 +54,5 @@ viewrr:
     grpcTarget: "$RECS_GRPC_TARGET:localhost:50051"
   scanner:
     fallbackIntervalMinutes: "$SCANNER_FALLBACK_MINUTES:15"
+  cluster:
+    enrollmentSecret: "$CLUSTER_ENROLLMENT_SECRET:change-me-dev-only"   # Phase 14 #73

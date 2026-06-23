@@ -16,6 +16,7 @@ data class AppConfig(
     val cors: Cors,
     val recs: Recs,
     val scanner: Scanner,
+    val cluster: Cluster,
     val env: String,
     val publicBaseUrl: String,
 ) {
@@ -51,6 +52,9 @@ data class AppConfig(
     data class Recs(val grpcTarget: String)
 
     data class Scanner(val fallbackIntervalMinutes: Long)
+
+    // Phase 14 (#73): enrollment secret an Agent presents at register to receive a per-node token.
+    data class Cluster(val enrollmentSecret: String)
 
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
@@ -91,6 +95,10 @@ data class AppConfig(
             scanner = Scanner(
                 fallbackIntervalMinutes = env.config.propertyOrNull("viewrr.scanner.fallbackIntervalMinutes")
                     ?.getString()?.toLong() ?: 15,
+            ),
+            cluster = Cluster(
+                enrollmentSecret = env.config.propertyOrNull("viewrr.cluster.enrollmentSecret")
+                    ?.getString() ?: "change-me-dev-only",
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()
