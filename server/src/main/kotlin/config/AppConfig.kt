@@ -50,6 +50,7 @@ data class AppConfig(
         val hlsRoot: String,
         val downloadsRoot: String,
         val tmdbApiKey: String,
+        val hlsCacheMaxBytes: Long, // Phase 15 (#80) HLS cache cap
     )
 
     data class Cors(val allowedHosts: List<String>)
@@ -99,6 +100,8 @@ data class AppConfig(
                 hlsRoot = env.config.property("viewrr.media.hlsRoot").getString(),
                 downloadsRoot = env.config.property("viewrr.media.downloadsRoot").getString(),
                 tmdbApiKey = env.config.propertyOrNull("viewrr.media.tmdbApiKey")?.getString() ?: "",
+                hlsCacheMaxBytes = env.config.propertyOrNull("viewrr.media.hlsCacheMaxBytes")?.getString()?.toLong()
+                    ?: 53_687_091_200L, // 50 GiB
             ),
             cors = Cors(
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")

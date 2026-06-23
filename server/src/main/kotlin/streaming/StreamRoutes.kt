@@ -96,6 +96,10 @@ private suspend fun serveHlsFile(
         coordinator.ensure(mediaId, target)
     }
     if (!Files.isRegularFile(target)) throw NotFoundException()
+    // Phase 15 (#80): touch the playlist on serve as the LRU access signal for cache eviction.
+    if (file == "playlist.m3u8") {
+        runCatching { Files.setLastModifiedTime(target, java.nio.file.attribute.FileTime.from(java.time.Instant.now())) }
+    }
 
     val ct = when (file.substringAfterLast('.', "").lowercase()) {
         "m3u8" -> M3U8_CT

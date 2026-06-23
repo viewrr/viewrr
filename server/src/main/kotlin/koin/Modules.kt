@@ -25,6 +25,7 @@ import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.TranscodeCoordinator
+import wtf.jobin.scanner.HlsCacheManager
 import wtf.jobin.scanner.TmdbClient
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.Mp4Downloader
@@ -56,7 +57,8 @@ val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
     single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot) }
     single { TmdbClient(get<AppConfig>().media.tmdbApiKey) }
-    single { TranscodeCoordinator(get()) } // Phase 15 (#75) lazy transcode + stampede dedup
+    single { HlsCacheManager(java.nio.file.Path.of(get<AppConfig>().media.hlsRoot), get(), get<AppConfig>().media.hlsCacheMaxBytes) } // #80
+    single { TranscodeCoordinator(get(), get()) } // Phase 15 (#75/#80) lazy transcode + cache cap
     single { MediaScanner(get(), get(), get()) }
     single { LibraryRepository(get()) }
     // Eager so the watcher is ready before #35 wires start() at boot.

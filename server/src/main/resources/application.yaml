@@ -49,6 +49,7 @@ viewrr:
     hlsRoot: "$HLS_ROOT:/tmp/viewrr-hls"
     downloadsRoot: "$DOWNLOADS_ROOT:/tmp/viewrr-downloads"
     tmdbApiKey: "$TMDB_API_KEY:"
+    hlsCacheMaxBytes: "$HLS_CACHE_MAX_BYTES:53687091200"   # Phase 15 #80 — 50 GiB default
   cors:
     allowedHosts:
       - "localhost:5173"

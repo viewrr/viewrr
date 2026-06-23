@@ -16,7 +16,10 @@ import java.util.concurrent.ConcurrentHashMap
  * ponytail: per-media Mutex in a ConcurrentHashMap; the map grows by distinct media id, which
  * is fine for a personal library. Add eviction only if that set gets large.
  */
-class TranscodeCoordinator(private val transcoder: HlsTranscoder) {
+class TranscodeCoordinator(
+    private val transcoder: HlsTranscoder,
+    private val cache: HlsCacheManager,
+) {
     private val locks = ConcurrentHashMap<UUID, Mutex>()
 
     suspend fun ensure(mediaId: UUID, playlist: Path) {
@@ -25,5 +28,7 @@ class TranscodeCoordinator(private val transcoder: HlsTranscoder) {
             if (Files.isRegularFile(playlist)) return // built while we waited on the lock
             transcoder.transcode(mediaId)
         }
+        // Phase 15 (#80): bound the cache after adding to it; pin the media we just built.
+        cache.sweep(pin = mediaId)
     }
 }
