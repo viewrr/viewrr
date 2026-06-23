@@ -70,6 +70,7 @@ data class AppConfig(
         val meshAddress: String?,
         val clientAddress: String?,
         val tokenFile: String,
+        val libraryRoots: List<String>, // Phase 15 (#76): dirs the raw endpoint may serve from
     )
 
     companion object {
@@ -130,6 +131,8 @@ data class AppConfig(
                     ?.takeIf { it.isNotBlank() },
                 tokenFile = env.config.propertyOrNull("viewrr.agent.tokenFile")
                     ?.getString() ?: "/tmp/viewrr-agent.json",
+                libraryRoots = env.config.propertyOrNull("viewrr.agent.libraryRoots")?.getString()
+                    ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()

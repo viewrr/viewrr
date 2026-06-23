@@ -66,3 +66,4 @@ viewrr:
     meshAddress: "$AGENT_MESH_ADDR:"
     clientAddress: "$AGENT_CLIENT_ADDR:"
     tokenFile: "$AGENT_TOKEN_FILE:/tmp/viewrr-agent.json"
+    libraryRoots: "$AGENT_LIBRARY_ROOTS:"   # Phase 15 #76 — comma-separated dirs the /raw endpoint may serve

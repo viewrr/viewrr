@@ -51,6 +51,7 @@ import wtf.jobin.stremio.StremioKeys
 import wtf.jobin.stremio.stremioRoutes
 import wtf.jobin.cluster.NodeRegistry
 import wtf.jobin.cluster.agentRoutes
+import wtf.jobin.cluster.agentRawRoutes
 
 fun Application.configureRouting() {
     val appConfig by inject<AppConfig>()
@@ -58,7 +59,10 @@ fun Application.configureRouting() {
     // serving (#75) mounts here later. ponytail: agent still boots DB/scanner
     // plugins for now (module list is role-blind) — trim for NAS deploy.
     if (appConfig.role == wtf.jobin.config.Role.AGENT) {
-        routing { get("/health") { call.respondText("ok") } }
+        routing {
+            get("/health") { call.respondText("ok") }
+            agentRawRoutes(appConfig.cluster.enrollmentSecret, appConfig.agent.libraryRoots) // #76
+        }
         return
     }
     val auth by inject<AuthService>()
