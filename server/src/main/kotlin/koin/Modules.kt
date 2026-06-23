@@ -24,6 +24,7 @@ import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
+import wtf.jobin.scanner.TmdbClient
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.Mp4Downloader
 import wtf.jobin.watch.ContinueWatchingService
@@ -53,7 +54,8 @@ val authModule = module {
 val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
     single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot) }
-    single { MediaScanner(get(), get(), get()) }
+    single { TmdbClient(get<AppConfig>().media.tmdbApiKey) }
+    single { MediaScanner(get(), get(), get(), get()) }
     single { LibraryRepository(get()) }
     // Eager so the watcher is ready before #35 wires start() at boot.
     single(createdAtStart = true) { LibraryWatcher(get()) }

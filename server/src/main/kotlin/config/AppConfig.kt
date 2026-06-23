@@ -2,7 +2,13 @@ package wtf.jobin.config
 
 import io.ktor.server.application.*
 
+// Phase 14 (#68): one binary, mode-switched. HUB serves; AGENT is a stateless
+// raw-byte store (register + raw-serve only). Route gating lands with those
+// endpoints (#69, #75).
+enum class Role { HUB, AGENT }
+
 data class AppConfig(
+    val role: Role,
     val db: Db,
     val redis: Redis,
     val auth: Auth,
@@ -37,6 +43,7 @@ data class AppConfig(
         val ffmpegPath: String,
         val hlsRoot: String,
         val downloadsRoot: String,
+        val tmdbApiKey: String,
     )
 
     data class Cors(val allowedHosts: List<String>)
@@ -47,6 +54,8 @@ data class AppConfig(
 
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
+            role = env.config.propertyOrNull("viewrr.role")?.getString()
+                ?.let { Role.valueOf(it.uppercase()) } ?: Role.HUB,
             db = Db(
                 r2dbcUrl = env.config.property("viewrr.db.r2dbcUrl").getString(),
                 jdbcUrl = env.config.property("viewrr.db.jdbcUrl").getString(),
@@ -68,6 +77,7 @@ data class AppConfig(
                 ffmpegPath = env.config.property("viewrr.media.ffmpegPath").getString(),
                 hlsRoot = env.config.property("viewrr.media.hlsRoot").getString(),
                 downloadsRoot = env.config.property("viewrr.media.downloadsRoot").getString(),
+                tmdbApiKey = env.config.propertyOrNull("viewrr.media.tmdbApiKey")?.getString() ?: "",
             ),
             cors = Cors(
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")

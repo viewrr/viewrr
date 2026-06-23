@@ -22,6 +22,7 @@ import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.libraryRoutes
 import wtf.jobin.scanner.mediaRoutes
 import wtf.jobin.scanner.mediaAdminRoutes
+import wtf.jobin.scanner.TmdbClient
 import wtf.jobin.scanner.scannerRoutes
 import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
@@ -50,6 +51,7 @@ fun Application.configureRouting() {
     val auth by inject<AuthService>()
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
+    val tmdb by inject<TmdbClient>()
     val transcoder by inject<HlsTranscoder>()
     val libraries by inject<LibraryRepository>()
     val libraryWatcher by inject<LibraryWatcher>()
@@ -88,7 +90,7 @@ fun Application.configureRouting() {
         collectionRoutes(collections)
         seriesRoutes(db)
         musicRoutes(db)
-        mediaAdminRoutes(db)
+        mediaAdminRoutes(db, tmdb)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
     }
     partyHub.startFlushLoop(this)

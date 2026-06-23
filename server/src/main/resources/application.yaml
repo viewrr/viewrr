@@ -22,6 +22,7 @@ ktor:
 
 viewrr:
   env: "$VIEWRR_ENV:dev"
+  role: "$VIEWRR_ROLE:hub"   # hub | agent (Phase 14 #68)
   publicBaseUrl: "$PUBLIC_BASE_URL:http://localhost:8080"
   db:
     # Host Postgres.app on port 5433 — has the paradedb extension installed.
@@ -44,6 +45,7 @@ viewrr:
     ffmpegPath: "$FFMPEG_PATH:ffmpeg"
     hlsRoot: "$HLS_ROOT:/tmp/viewrr-hls"
     downloadsRoot: "$DOWNLOADS_ROOT:/tmp/viewrr-downloads"
+    tmdbApiKey: "$TMDB_API_KEY:"
   cors:
     allowedHosts:
       - "localhost:5173"

@@ -31,6 +31,7 @@ class MediaScanner(
     private val db: R2dbcDatabase,
     private val ffprobe: Ffprobe,
     private val transcoder: HlsTranscoder,
+    private val tmdb: TmdbClient,
 ) {
 
     @OptIn(DelicateCoroutinesApi::class)
@@ -76,16 +77,25 @@ class MediaScanner(
                 continue
             }
             val parsed = FilenameParser.parse(file.nameWithoutExtension)
+            // ponytail: movies only, lookup inline in the scan loop (one HTTP GET per new
+            // movie). Fine for personal libraries; move to the async block below or a worker
+            // queue if scans grow large or TMDb rate-limits bite. Shows: parse showTitle != null.
+            val meta = if (parsed.showTitle == null) tmdb.lookupMovie(parsed.cleanTitle, parsed.year) else null
             val now = Instant.now()
             val newId = suspendTransaction(db) {
                 MediaItems.insertAndGetId {
                     it[MediaItems.libraryId] = libraryId
+                    it[MediaItems.nodeId] = wtf.jobin.db.LOCAL_NODE_ID // Phase 14 (#72)
                     it[MediaItems.title] = file.nameWithoutExtension
                     it[MediaItems.cleanTitle] = parsed.cleanTitle
                     it[MediaItems.showTitle] = parsed.showTitle
                     it[MediaItems.seasonNumber] = parsed.seasonNumber
                     it[MediaItems.episodeNumber] = parsed.episodeNumber
                     it[MediaItems.year] = parsed.year?.toShort()
+                    it[MediaItems.tmdbId] = meta?.tmdbId
+                    it[MediaItems.poster] = meta?.poster
+                    it[MediaItems.backdrop] = meta?.backdrop
+                    it[MediaItems.overview] = meta?.overview
                     it[MediaItems.originalPath] = abs
                     it[MediaItems.durationSecs] = probe.durationSecs
                     it[MediaItems.sizeBytes] = probe.sizeBytes
