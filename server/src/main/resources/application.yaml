@@ -19,6 +19,7 @@ ktor:
       - wtf.jobin.plugins.StatusPagesKt.configureStatusPages
       - wtf.jobin.RoutingKt.configureRouting
       - wtf.jobin.plugins.ApiDocsKt.configureApiDocs
+      - wtf.jobin.cluster.AgentBootstrapKt.configureAgent
 
 viewrr:
   env: "$VIEWRR_ENV:dev"
@@ -56,3 +57,9 @@ viewrr:
     fallbackIntervalMinutes: "$SCANNER_FALLBACK_MINUTES:15"
   cluster:
     enrollmentSecret: "$CLUSTER_ENROLLMENT_SECRET:change-me-dev-only"   # Phase 14 #73
+  agent:                                                                # Phase 14 #68 (role=agent only)
+    hubBaseUrl: "$AGENT_HUB_URL:http://localhost:8080"
+    name: "$AGENT_NAME:"
+    meshAddress: "$AGENT_MESH_ADDR:"
+    clientAddress: "$AGENT_CLIENT_ADDR:"
+    tokenFile: "$AGENT_TOKEN_FILE:/tmp/viewrr-agent.json"

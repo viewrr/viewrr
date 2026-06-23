@@ -17,6 +17,7 @@ data class AppConfig(
     val recs: Recs,
     val scanner: Scanner,
     val cluster: Cluster,
+    val agent: Agent,
     val env: String,
     val publicBaseUrl: String,
 ) {
@@ -55,6 +56,16 @@ data class AppConfig(
 
     // Phase 14 (#73): enrollment secret an Agent presents at register to receive a per-node token.
     data class Cluster(val enrollmentSecret: String)
+
+    // Phase 14 (#68): Agent-mode settings. Used only when role=AGENT.
+    // name blank -> hostname. tokenFile persists {nodeId, token} so re-boot skips re-register.
+    data class Agent(
+        val hubBaseUrl: String,
+        val name: String,
+        val meshAddress: String?,
+        val clientAddress: String?,
+        val tokenFile: String,
+    )
 
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
@@ -99,6 +110,17 @@ data class AppConfig(
             cluster = Cluster(
                 enrollmentSecret = env.config.propertyOrNull("viewrr.cluster.enrollmentSecret")
                     ?.getString() ?: "change-me-dev-only",
+            ),
+            agent = Agent(
+                hubBaseUrl = env.config.propertyOrNull("viewrr.agent.hubBaseUrl")
+                    ?.getString() ?: "http://localhost:8080",
+                name = env.config.propertyOrNull("viewrr.agent.name")?.getString().orEmpty(),
+                meshAddress = env.config.propertyOrNull("viewrr.agent.meshAddress")?.getString()
+                    ?.takeIf { it.isNotBlank() },
+                clientAddress = env.config.propertyOrNull("viewrr.agent.clientAddress")?.getString()
+                    ?.takeIf { it.isNotBlank() },
+                tokenFile = env.config.propertyOrNull("viewrr.agent.tokenFile")
+                    ?.getString() ?: "/tmp/viewrr-agent.json",
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()

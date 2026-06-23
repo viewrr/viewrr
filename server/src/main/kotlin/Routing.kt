@@ -50,6 +50,14 @@ import wtf.jobin.cluster.NodeRegistry
 import wtf.jobin.cluster.agentRoutes
 
 fun Application.configureRouting() {
+    val appConfig by inject<AppConfig>()
+    // Phase 14 (#68): AGENT serves a minimal surface (no Hub routes). Raw byte
+    // serving (#75) mounts here later. ponytail: agent still boots DB/scanner
+    // plugins for now (module list is role-blind) — trim for NAS deploy.
+    if (appConfig.role == wtf.jobin.config.Role.AGENT) {
+        routing { get("/health") { call.respondText("ok") } }
+        return
+    }
     val auth by inject<AuthService>()
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
@@ -65,7 +73,6 @@ fun Application.configureRouting() {
     val continueWatching by inject<ContinueWatchingService>()
     val partyRooms by inject<PartyRoomRepository>()
     val db by inject<R2dbcDatabase>()
-    val appConfig by inject<AppConfig>()
     val partyHub by inject<PartyHub>()
     val downloads by inject<DownloadService>()
     val collections by inject<CollectionRepository>()
