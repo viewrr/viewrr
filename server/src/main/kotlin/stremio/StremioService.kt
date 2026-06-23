@@ -134,7 +134,9 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
 
     suspend fun streams(userId: UUID, key: String, id: String): List<StStream> {
         val uuid = resolveStreamId(userId, id) ?: return emptyList()
-        return listOf(StStream(url = "$publicBaseUrl/stream/$uuid/playlist.m3u8?key=$key", name = "viewrr"))
+        // Key as a PATH prefix (not ?query): HLS players drop the query when resolving the
+        // relative segment/variant URIs inside the playlist, so query-based auth 404s the segments.
+        return listOf(StStream(url = "$publicBaseUrl/stream/k/$key/$uuid/playlist.m3u8", name = "viewrr"))
     }
 
     suspend fun mediaIdFor(userId: UUID, id: String): UUID? = resolveStreamId(userId, id)
