@@ -55,7 +55,7 @@ val authModule = module {
 
 val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
-    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot) }
+    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot, get<AppConfig>().cluster.enrollmentSecret) }
     single { TmdbClient(get<AppConfig>().media.tmdbApiKey) }
     single { HlsCacheManager(java.nio.file.Path.of(get<AppConfig>().media.hlsRoot), get(), get<AppConfig>().media.hlsCacheMaxBytes) } // #80
     single { TranscodeCoordinator(get(), get()) } // Phase 15 (#75/#80) lazy transcode + cache cap

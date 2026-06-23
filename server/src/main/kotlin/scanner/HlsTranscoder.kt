@@ -11,7 +11,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
+import wtf.jobin.db.LOCAL_NODE_ID
 import wtf.jobin.db.MediaItems
+import wtf.jobin.db.Nodes
+import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -22,6 +25,7 @@ class HlsTranscoder(
     private val ffmpegPath: String,
     private val ffprobePath: String,
     private val hlsRoot: String,
+    private val enrollmentSecret: String,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -32,12 +36,15 @@ class HlsTranscoder(
      * Throws if any ffmpeg pass exits non-zero; message includes the tail of merged stdout+stderr.
      */
     suspend fun transcode(mediaId: UUID): Path {
-        val (libraryId, inputPath) = suspendTransaction(db) {
-            MediaItems.select(MediaItems.libraryId, MediaItems.originalPath)
+        val (libraryId, originalPath, nodeId) = suspendTransaction(db) {
+            MediaItems.select(MediaItems.libraryId, MediaItems.originalPath, MediaItems.nodeId)
                 .where { MediaItems.id eq mediaId }
-                .map { it[MediaItems.libraryId].value to it[MediaItems.originalPath] }
+                .map { Triple(it[MediaItems.libraryId].value, it[MediaItems.originalPath], it[MediaItems.nodeId].value) }
                 .firstOrNull()
         } ?: error("media item $mediaId not found")
+        // Phase 15 (#74): source is a local file (local node) or the owning Node's /raw URL
+        // (token in query so the rest of the transcoder is untouched). ffmpeg/ffprobe read URLs natively.
+        val inputPath = resolveSource(nodeId, originalPath)
 
         val outDir = Path.of(hlsRoot, libraryId.toString(), mediaId.toString(), "hls")
         val playlist = outDir.resolve("playlist.m3u8")
@@ -83,6 +90,26 @@ class HlsTranscoder(
             }
         }
         return absPlaylist
+    }
+
+    /**
+     * Phase 15 (#74). Local file when the media is on the local node (or the node has no
+     * reachable address yet); otherwise the owning Node's /raw URL with the auth token in the
+     * query (path kept LAST so the source still ends in `.ext` for direct-play detection).
+     * ponytail: token-in-query is v0 LAN auth; move to a header / per-node token (#73) later.
+     */
+    private suspend fun resolveSource(nodeId: UUID, originalPath: String): String {
+        if (nodeId == LOCAL_NODE_ID) return originalPath
+        val addr = suspendTransaction(db) {
+            Nodes.select(Nodes.clientAddress, Nodes.meshAddress)
+                .where { Nodes.id eq nodeId }
+                .map { it[Nodes.clientAddress] ?: it[Nodes.meshAddress] }
+                .firstOrNull()
+        }
+        if (addr.isNullOrBlank()) return originalPath
+        val tok = URLEncoder.encode(enrollmentSecret, "UTF-8")
+        val p = URLEncoder.encode(originalPath, "UTF-8")
+        return "http://$addr/raw?token=$tok&path=$p"
     }
 
     /**

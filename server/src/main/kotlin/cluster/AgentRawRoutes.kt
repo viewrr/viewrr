@@ -26,7 +26,9 @@ fun Route.agentRawRoutes(enrollmentSecret: String, libraryRoots: List<String>) {
     route("/raw") {
         install(PartialContent)
         get {
-            if (call.request.headers["X-Viewrr-Token"] != enrollmentSecret) {
+            // token via header or query (ffmpeg can't set headers easily; #74 passes it in the URL)
+            val token = call.request.queryParameters["token"] ?: call.request.headers["X-Viewrr-Token"]
+            if (token != enrollmentSecret) {
                 call.respond(HttpStatusCode.Unauthorized); return@get
             }
             val pathParam = call.request.queryParameters["path"]
