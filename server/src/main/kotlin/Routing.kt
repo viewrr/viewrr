@@ -70,7 +70,7 @@ fun Application.configureRouting() {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
         adminUserRoutes(users)
-        scannerRoutes(scanner)
+        scannerRoutes(scanner, musicScanner)
         libraryRoutes(libraries, libraryWatcher, scanner, musicScanner)
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)

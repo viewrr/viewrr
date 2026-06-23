@@ -33,19 +33,15 @@ object ScannerScheduler {
             val libraries = libraryRepo.list().filter { it.watchEnabled }
             log.info("boot scan: {} watch-enabled libraries", libraries.size)
             for (lib in libraries) {
-                if (lib.kind == "music") {
-                    // ponytail: music has no live watcher in v1; scan only.
-                    scope.launch(Dispatchers.IO) {
-                        runCatching { musicScanner.scan(lib.id) }
-                            .onFailure { log.warn("boot scan failed for library {}", lib.id, it) }
-                    }
-                } else {
-                    scope.launch(Dispatchers.IO) {
-                        runCatching { scanner.scan(lib.id) }
-                            .onFailure { log.warn("boot scan failed for library {}", lib.id, it) }
-                    }
-                    watcher.watch(lib.id, Path.of(lib.rootPath))
+                // Index both video and music per library — folders are mixed.
+                scope.launch(Dispatchers.IO) {
+                    runCatching { scanner.scan(lib.id) }
+                        .onFailure { log.warn("boot media scan failed for library {}", lib.id, it) }
+                    runCatching { musicScanner.scan(lib.id) }
+                        .onFailure { log.warn("boot music scan failed for library {}", lib.id, it) }
                 }
+                // Live FS watch is video-only; music is caught on the fallback cycle.
+                if (lib.kind != "music") watcher.watch(lib.id, Path.of(lib.rootPath))
             }
         }
 
@@ -59,12 +55,10 @@ object ScannerScheduler {
                 val libraries = libraryRepo.list().filter { it.watchEnabled }
                 log.info("fallback cycle: scanning {} libraries", libraries.size)
                 for (lib in libraries) {
-                    val result = if (lib.kind == "music") {
-                        runCatching { musicScanner.scan(lib.id) }
-                    } else {
-                        runCatching { scanner.scan(lib.id) }
-                    }
-                    result.onFailure { log.warn("fallback scan failed for library {}", lib.id, it) }
+                    runCatching { scanner.scan(lib.id) }
+                        .onFailure { log.warn("fallback media scan failed for library {}", lib.id, it) }
+                    runCatching { musicScanner.scan(lib.id) }
+                        .onFailure { log.warn("fallback music scan failed for library {}", lib.id, it) }
                 }
             }
         }

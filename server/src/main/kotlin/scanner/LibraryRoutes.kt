@@ -42,13 +42,12 @@ fun Route.libraryRoutes(repo: LibraryRepository, watcher: LibraryWatcher, scanne
                 if (!Files.isDirectory(path)) throw IllegalArgumentException("rootPath is not a directory: ${body.rootPath}")
                 if (!Files.isReadable(path)) throw IllegalArgumentException("rootPath is not readable: ${body.rootPath}")
                 val row = repo.create(body.name, body.kind, path.toAbsolutePath().toString())
-                if (row.kind == "music") {
-                    // ponytail: no live-watch for music v1; manual/scheduled rescans only.
-                    call.application.launch { runCatching { musicScanner.scan(row.id) } }
-                } else {
-                    if (row.watchEnabled) watcher.watch(row.id, Path.of(row.rootPath))
-                    // Index files already on disk now; watcher only catches future events.
-                    call.application.launch { runCatching { scanner.scan(row.id) } }
+                // Personal folders mix video + music — index both regardless of kind.
+                // kind governs live-watch only (video FS events; music caught on rescan).
+                if (row.kind != "music" && row.watchEnabled) watcher.watch(row.id, Path.of(row.rootPath))
+                call.application.launch {
+                    runCatching { scanner.scan(row.id) }
+                    runCatching { musicScanner.scan(row.id) }
                 }
                 call.respond(HttpStatusCode.Created, row.toView())
             }
