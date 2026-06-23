@@ -18,6 +18,7 @@ import wtf.jobin.media.playbackRoutes
 import wtf.jobin.media.homeRoutes
 import wtf.jobin.media.mediaSearchRoutes
 import wtf.jobin.scanner.HlsTranscoder
+import wtf.jobin.scanner.TranscodeCoordinator
 import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
@@ -65,6 +66,7 @@ fun Application.configureRouting() {
     val scanner by inject<MediaScanner>()
     val tmdb by inject<TmdbClient>()
     val transcoder by inject<HlsTranscoder>()
+    val transcodeCoordinator by inject<TranscodeCoordinator>()
     val libraries by inject<LibraryRepository>()
     val libraryWatcher by inject<LibraryWatcher>()
     val musicScanner by inject<MusicScanner>()
@@ -96,7 +98,7 @@ fun Application.configureRouting() {
         watchEventRoutes(watchEvents)
         continueWatchingRoutes(continueWatching)
         partyRoomRoutes(partyRooms, partyHub)
-        streamRoutes(db, appConfig.media, stremioKeys)
+        streamRoutes(db, appConfig.media, stremioKeys, transcodeCoordinator)
         trickplayRoutes(db, appConfig.media)
         subtitleRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)

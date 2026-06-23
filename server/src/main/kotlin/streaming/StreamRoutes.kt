@@ -24,7 +24,12 @@ import java.util.UUID
 private val M3U8_CT = ContentType.parse("application/vnd.apple.mpegurl")
 private val TS_CT = ContentType.parse("video/mp2t")
 
-fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media, stremioKeys: wtf.jobin.stremio.StremioKeys) {
+fun Route.streamRoutes(
+    db: R2dbcDatabase,
+    media: AppConfig.Media,
+    stremioKeys: wtf.jobin.stremio.StremioKeys,
+    coordinator: wtf.jobin.scanner.TranscodeCoordinator,
+) {
     val hlsRoot = Path.of(media.hlsRoot)
     route("/stream") {
         // PartialContent gives us Range support transparently; LocalFileContent on Netty
@@ -34,7 +39,7 @@ fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media, stremioKeys: w
         // (seg_000.ts, v0.m3u8) resolve under it. HLS players drop ?query on relative refs.
         get("/k/{key}/{media_id}/{file}") {
             val uid = call.parameters["key"]?.let { stremioKeys.resolve(it) } ?: throw NotFoundException()
-            serveHlsFile(call, db, hlsRoot, uid)
+            serveHlsFile(call, db, hlsRoot, uid, coordinator)
         }
         // optional JWT: browser/app clients send Bearer; single-file fetches may pass ?key=
         authenticate("auth-jwt", optional = true) {
@@ -42,7 +47,7 @@ fun Route.streamRoutes(db: R2dbcDatabase, media: AppConfig.Media, stremioKeys: w
                 val uid = call.principal<JWTPrincipal>()?.subject?.let { UUID.fromString(it) }
                     ?: call.request.queryParameters["key"]?.let { stremioKeys.resolve(it) }
                     ?: throw NotFoundException()
-                serveHlsFile(call, db, hlsRoot, uid)
+                serveHlsFile(call, db, hlsRoot, uid, coordinator)
             }
         }
     }
@@ -54,6 +59,7 @@ private suspend fun serveHlsFile(
     db: R2dbcDatabase,
     hlsRoot: Path,
     uid: UUID,
+    coordinator: wtf.jobin.scanner.TranscodeCoordinator,
 ) {
     val file = call.parameters["file"]!!
     // Path traversal guard: any separator or parent ref → 404 (don't leak).
@@ -83,6 +89,12 @@ private suspend fun serveHlsFile(
         .resolve(mediaId.toString())
         .resolve("hls")
         .resolve(file)
+    // Phase 15 (#75): lazy transcode. The master playlist is the first thing an HLS player
+    // fetches; if it isn't built yet, transcode now (deduped) and then serve. Segment/variant
+    // requests arrive only after the playlist exists, so they never trigger a transcode.
+    if (file == "playlist.m3u8" && !Files.isRegularFile(target)) {
+        coordinator.ensure(mediaId, target)
+    }
     if (!Files.isRegularFile(target)) throw NotFoundException()
 
     val ct = when (file.substringAfterLast('.', "").lowercase()) {

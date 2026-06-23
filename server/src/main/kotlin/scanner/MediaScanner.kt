@@ -1,12 +1,9 @@
 package wtf.jobin.scanner
 
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.*
@@ -30,11 +27,11 @@ data class ScanResult(val added: Int, val removed: Int, val skipped: Int)
 class MediaScanner(
     private val db: R2dbcDatabase,
     private val ffprobe: Ffprobe,
-    private val transcoder: HlsTranscoder,
     private val tmdb: TmdbClient,
 ) {
 
-    @OptIn(DelicateCoroutinesApi::class)
+    // Phase 15 (#75): scan only indexes. Transcode is lazy — triggered on first stream
+    // request (see TranscodeCoordinator), so a scan no longer transcodes the whole library.
     suspend fun scan(libraryId: UUID): ScanResult {
         val rootPath = suspendTransaction(db) {
             Libraries.selectAll()
@@ -64,7 +61,6 @@ class MediaScanner(
 
         var added = 0
         var skipped = 0
-        val newIds = mutableListOf<UUID>()
         for (file in onDisk) {
             val abs = file.toAbsolutePath().toString()
             if (abs in existingPaths) { skipped++; continue }
@@ -82,7 +78,7 @@ class MediaScanner(
             // queue if scans grow large or TMDb rate-limits bite. Shows: parse showTitle != null.
             val meta = if (parsed.showTitle == null) tmdb.lookupMovie(parsed.cleanTitle, parsed.year) else null
             val now = Instant.now()
-            val newId = suspendTransaction(db) {
+            suspendTransaction(db) {
                 MediaItems.insertAndGetId {
                     it[MediaItems.libraryId] = libraryId
                     it[MediaItems.nodeId] = wtf.jobin.db.LOCAL_NODE_ID // Phase 14 (#72)
@@ -102,25 +98,14 @@ class MediaScanner(
                     it[MediaItems.mimeType] = probe.mimeType
                     it[MediaItems.createdAt] = now
                     it[MediaItems.updatedAt] = now
-                }.value
+                }
             }
-            newIds.add(newId)
             added++
         }
 
         val removed = suspendTransaction(db) {
             MediaItems.deleteWhere {
                 (MediaItems.libraryId eq libraryId) and (MediaItems.originalPath notInList onDiskPaths)
-            }
-        }
-
-        // ponytail: GlobalScope = JVM-lifetime fire-and-forget. Scanner response
-        // returns immediately; transcode errors land in the log, not the HTTP body.
-        // Upgrade to a worker queue when retries/visibility matter.
-        for (mediaId in newIds) {
-            GlobalScope.launch {
-                runCatching { transcoder.transcode(mediaId) }
-                    .onFailure { log.warn("auto-transcode failed for media $mediaId", it) }
             }
         }
 
