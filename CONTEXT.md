@@ -2,6 +2,22 @@
 
 Canonical terms for the viewrr domain. Glossary only — no implementation detail.
 
+## Clients
+
+### Mobile client
+viewrr's Android + iOS app, a fork of **AFinity** migrated to **Compose
+Multiplatform** (one Kotlin codebase for both). Plays via libmpv. Talks to the
+viewrr API (not the Jellyfin API the original fork used).
+
+### Web client
+A first-party **Vue 3** app for browser and TV (10-foot) surfaces, styled to the
+**Apple TV** design language, built with Tailwind CSS + Tailwind Plus.
+
+### Apple TV design language
+The agreed visual direction for every viewrr client surface: content shelves, a
+large hero, and focus-driven 10-foot navigation on TV. Not the tvOS platform —
+the design vocabulary, applied across web, TV, and mobile.
+
 ## Roles
 
 ### Hub
