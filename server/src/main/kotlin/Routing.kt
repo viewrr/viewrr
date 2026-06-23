@@ -15,6 +15,7 @@ import wtf.jobin.music.MusicScanner
 import wtf.jobin.music.musicRoutes
 import wtf.jobin.media.mediaListRoutes
 import wtf.jobin.media.playbackRoutes
+import wtf.jobin.media.homeRoutes
 import wtf.jobin.media.mediaSearchRoutes
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
@@ -89,6 +90,7 @@ fun Application.configureRouting() {
         mediaSearchRoutes(mediaSearch)
         mediaListRoutes(db)
         playbackRoutes(db, stremioKeys, appConfig.publicBaseUrl)
+        homeRoutes(db)
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
         watchEventRoutes(watchEvents)

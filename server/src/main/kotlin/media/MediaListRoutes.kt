@@ -35,7 +35,7 @@ data class MediaListItem(
     val overview: String? = null,
 )
 
-private fun ResultRow.toMediaItem() = MediaListItem(
+internal fun ResultRow.toMediaItem() = MediaListItem(
     id = this[MediaItems.id].value.toString(),
     title = this[MediaItems.title],
     cleanTitle = this[MediaItems.cleanTitle],
