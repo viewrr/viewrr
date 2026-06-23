@@ -38,6 +38,10 @@ data class AppConfig(
         val jwtRealm: String,
         val accessTtlMinutes: Long,
         val refreshTtlDays: Long,
+        // Phase 20 (#113): when set, viewrr validates Keycloak RS256 tokens via JWKS.
+        // When null/blank, the legacy HS256 path stays live. See docs/runbooks/keycloak.md.
+        val oidcIssuer: String? = null,
+        val oidcJwksUrl: String? = null,
     )
 
     data class Media(
@@ -86,6 +90,8 @@ data class AppConfig(
                 jwtRealm = env.config.property("viewrr.auth.jwtRealm").getString(),
                 accessTtlMinutes = env.config.property("viewrr.auth.accessTtlMinutes").getString().toLong(),
                 refreshTtlDays = env.config.property("viewrr.auth.refreshTtlDays").getString().toLong(),
+                oidcIssuer = env.config.propertyOrNull("viewrr.auth.oidcIssuer")?.getString()?.takeIf { it.isNotBlank() },
+                oidcJwksUrl = env.config.propertyOrNull("viewrr.auth.oidcJwksUrl")?.getString()?.takeIf { it.isNotBlank() },
             ),
             media = Media(
                 ffprobePath = env.config.property("viewrr.media.ffprobePath").getString(),

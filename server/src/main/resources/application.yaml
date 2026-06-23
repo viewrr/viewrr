@@ -41,6 +41,8 @@ viewrr:
     jwtRealm: "viewrr"
     accessTtlMinutes: 15
     refreshTtlDays: 30
+    oidcIssuer: "$OIDC_ISSUER:"      # Phase 20 #113 — set to Keycloak realm URL to enable RS256
+    oidcJwksUrl: "$OIDC_JWKS_URL:"   # .../protocol/openid-connect/certs
   media:
     ffprobePath: "$FFPROBE_PATH:ffprobe"
     ffmpegPath: "$FFMPEG_PATH:ffmpeg"
