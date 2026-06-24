@@ -21,6 +21,8 @@ data class UserSession(val userId: String, val isAdmin: Boolean)
 
 fun Application.configureSecurity() {
     val cfg by inject<AppConfig>()
+    // #97: stateless AGENT has no Redis/JWT — it serves only register + /raw (token-guarded).
+    if (cfg.role == wtf.jobin.config.Role.AGENT) return
     val redis by inject<RedisAsyncCommands<String, String>>()
     val sessionTtlSecs = cfg.auth.refreshTtlDays * 86_400L
 
@@ -33,9 +35,18 @@ fun Application.configureSecurity() {
         }
     }
 
+    // Phase 20 (#113): OIDC config surface in place. RS256/JWKS validation against Keycloak
+    // is the cutover step — it needs the jwks-rsa dep + a live realm to verify, so it lands
+    // with the deploy (docs/runbooks/keycloak.md §6-7). Until then the legacy HS256 path runs.
+    if (!cfg.auth.oidcIssuer.isNullOrBlank()) {
+        log.warn("viewrr.auth.oidc* set but RS256/JWKS not wired yet (#113) — using legacy HS256. See docs/runbooks/keycloak.md cutover.")
+    }
+
     authentication {
         jwt("auth-jwt") {
             realm = cfg.auth.jwtRealm
+            // TODO #113: when cfg.auth.oidcIssuer is set, swap to verifier(jwkProvider, issuer)
+            // (com.auth0.jwk.JwkProviderBuilder over cfg.auth.oidcJwksUrl) for Keycloak RS256.
             verifier(
                 JWT.require(Algorithm.HMAC256(cfg.auth.jwtSecret))
                     .withIssuer(cfg.auth.jwtIssuer)

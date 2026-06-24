@@ -2,7 +2,13 @@ package wtf.jobin.config
 
 import io.ktor.server.application.*
 
+// Phase 14 (#68): one binary, mode-switched. HUB serves; AGENT is a stateless
+// raw-byte store (register + raw-serve only). Route gating lands with those
+// endpoints (#69, #75).
+enum class Role { HUB, AGENT }
+
 data class AppConfig(
+    val role: Role,
     val db: Db,
     val redis: Redis,
     val auth: Auth,
@@ -10,6 +16,8 @@ data class AppConfig(
     val cors: Cors,
     val recs: Recs,
     val scanner: Scanner,
+    val cluster: Cluster,
+    val agent: Agent,
     val env: String,
     val publicBaseUrl: String,
 ) {
@@ -30,6 +38,10 @@ data class AppConfig(
         val jwtRealm: String,
         val accessTtlMinutes: Long,
         val refreshTtlDays: Long,
+        // Phase 20 (#113): when set, viewrr validates Keycloak RS256 tokens via JWKS.
+        // When null/blank, the legacy HS256 path stays live. See docs/runbooks/keycloak.md.
+        val oidcIssuer: String? = null,
+        val oidcJwksUrl: String? = null,
     )
 
     data class Media(
@@ -37,6 +49,8 @@ data class AppConfig(
         val ffmpegPath: String,
         val hlsRoot: String,
         val downloadsRoot: String,
+        val tmdbApiKey: String,
+        val hlsCacheMaxBytes: Long, // Phase 15 (#80) HLS cache cap
     )
 
     data class Cors(val allowedHosts: List<String>)
@@ -45,8 +59,24 @@ data class AppConfig(
 
     data class Scanner(val fallbackIntervalMinutes: Long)
 
+    // Phase 14 (#73): enrollment secret an Agent presents at register to receive a per-node token.
+    data class Cluster(val enrollmentSecret: String)
+
+    // Phase 14 (#68): Agent-mode settings. Used only when role=AGENT.
+    // name blank -> hostname. tokenFile persists {nodeId, token} so re-boot skips re-register.
+    data class Agent(
+        val hubBaseUrl: String,
+        val name: String,
+        val meshAddress: String?,
+        val clientAddress: String?,
+        val tokenFile: String,
+        val libraryRoots: List<String>, // Phase 15 (#76): dirs the raw endpoint may serve from
+    )
+
     companion object {
         fun from(env: ApplicationEnvironment): AppConfig = AppConfig(
+            role = env.config.propertyOrNull("viewrr.role")?.getString()
+                ?.let { Role.valueOf(it.uppercase()) } ?: Role.HUB,
             db = Db(
                 r2dbcUrl = env.config.property("viewrr.db.r2dbcUrl").getString(),
                 jdbcUrl = env.config.property("viewrr.db.jdbcUrl").getString(),
@@ -62,12 +92,17 @@ data class AppConfig(
                 jwtRealm = env.config.property("viewrr.auth.jwtRealm").getString(),
                 accessTtlMinutes = env.config.property("viewrr.auth.accessTtlMinutes").getString().toLong(),
                 refreshTtlDays = env.config.property("viewrr.auth.refreshTtlDays").getString().toLong(),
+                oidcIssuer = env.config.propertyOrNull("viewrr.auth.oidcIssuer")?.getString()?.takeIf { it.isNotBlank() },
+                oidcJwksUrl = env.config.propertyOrNull("viewrr.auth.oidcJwksUrl")?.getString()?.takeIf { it.isNotBlank() },
             ),
             media = Media(
                 ffprobePath = env.config.property("viewrr.media.ffprobePath").getString(),
                 ffmpegPath = env.config.property("viewrr.media.ffmpegPath").getString(),
                 hlsRoot = env.config.property("viewrr.media.hlsRoot").getString(),
                 downloadsRoot = env.config.property("viewrr.media.downloadsRoot").getString(),
+                tmdbApiKey = env.config.propertyOrNull("viewrr.media.tmdbApiKey")?.getString() ?: "",
+                hlsCacheMaxBytes = env.config.propertyOrNull("viewrr.media.hlsCacheMaxBytes")?.getString()?.toLong()
+                    ?: 53_687_091_200L, // 50 GiB
             ),
             cors = Cors(
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")
@@ -81,6 +116,23 @@ data class AppConfig(
             scanner = Scanner(
                 fallbackIntervalMinutes = env.config.propertyOrNull("viewrr.scanner.fallbackIntervalMinutes")
                     ?.getString()?.toLong() ?: 15,
+            ),
+            cluster = Cluster(
+                enrollmentSecret = env.config.propertyOrNull("viewrr.cluster.enrollmentSecret")
+                    ?.getString() ?: "change-me-dev-only",
+            ),
+            agent = Agent(
+                hubBaseUrl = env.config.propertyOrNull("viewrr.agent.hubBaseUrl")
+                    ?.getString() ?: "http://localhost:8080",
+                name = env.config.propertyOrNull("viewrr.agent.name")?.getString().orEmpty(),
+                meshAddress = env.config.propertyOrNull("viewrr.agent.meshAddress")?.getString()
+                    ?.takeIf { it.isNotBlank() },
+                clientAddress = env.config.propertyOrNull("viewrr.agent.clientAddress")?.getString()
+                    ?.takeIf { it.isNotBlank() },
+                tokenFile = env.config.propertyOrNull("viewrr.agent.tokenFile")
+                    ?.getString() ?: "/tmp/viewrr-agent.json",
+                libraryRoots = env.config.propertyOrNull("viewrr.agent.libraryRoots")?.getString()
+                    ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()

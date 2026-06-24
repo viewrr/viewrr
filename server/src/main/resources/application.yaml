@@ -19,9 +19,11 @@ ktor:
       - wtf.jobin.plugins.StatusPagesKt.configureStatusPages
       - wtf.jobin.RoutingKt.configureRouting
       - wtf.jobin.plugins.ApiDocsKt.configureApiDocs
+      - wtf.jobin.cluster.AgentBootstrapKt.configureAgent
 
 viewrr:
   env: "$VIEWRR_ENV:dev"
+  role: "$VIEWRR_ROLE:hub"   # hub | agent (Phase 14 #68)
   publicBaseUrl: "$PUBLIC_BASE_URL:http://localhost:8080"
   db:
     # Host Postgres.app on port 5433 — has the paradedb extension installed.
@@ -39,11 +41,15 @@ viewrr:
     jwtRealm: "viewrr"
     accessTtlMinutes: 15
     refreshTtlDays: 30
+    oidcIssuer: "$OIDC_ISSUER:"      # Phase 20 #113 — set to Keycloak realm URL to enable RS256
+    oidcJwksUrl: "$OIDC_JWKS_URL:"   # .../protocol/openid-connect/certs
   media:
     ffprobePath: "$FFPROBE_PATH:ffprobe"
     ffmpegPath: "$FFMPEG_PATH:ffmpeg"
     hlsRoot: "$HLS_ROOT:/tmp/viewrr-hls"
     downloadsRoot: "$DOWNLOADS_ROOT:/tmp/viewrr-downloads"
+    tmdbApiKey: "$TMDB_API_KEY:"
+    hlsCacheMaxBytes: "$HLS_CACHE_MAX_BYTES:53687091200"   # Phase 15 #80 — 50 GiB default
   cors:
     allowedHosts:
       - "localhost:5173"
@@ -52,3 +58,12 @@ viewrr:
     grpcTarget: "$RECS_GRPC_TARGET:localhost:50051"
   scanner:
     fallbackIntervalMinutes: "$SCANNER_FALLBACK_MINUTES:15"
+  cluster:
+    enrollmentSecret: "$CLUSTER_ENROLLMENT_SECRET:change-me-dev-only"   # Phase 14 #73
+  agent:                                                                # Phase 14 #68 (role=agent only)
+    hubBaseUrl: "$AGENT_HUB_URL:http://localhost:8080"
+    name: "$AGENT_NAME:"
+    meshAddress: "$AGENT_MESH_ADDR:"
+    clientAddress: "$AGENT_CLIENT_ADDR:"
+    tokenFile: "$AGENT_TOKEN_FILE:/tmp/viewrr-agent.json"
+    libraryRoots: "$AGENT_LIBRARY_ROOTS:"   # Phase 15 #76 — comma-separated dirs the /raw endpoint may serve

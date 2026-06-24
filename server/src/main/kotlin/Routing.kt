@@ -14,14 +14,18 @@ import wtf.jobin.media.MediaSearchService
 import wtf.jobin.music.MusicScanner
 import wtf.jobin.music.musicRoutes
 import wtf.jobin.media.mediaListRoutes
+import wtf.jobin.media.playbackRoutes
+import wtf.jobin.media.homeRoutes
 import wtf.jobin.media.mediaSearchRoutes
 import wtf.jobin.scanner.HlsTranscoder
+import wtf.jobin.scanner.TranscodeCoordinator
 import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
 import wtf.jobin.scanner.libraryRoutes
 import wtf.jobin.scanner.mediaRoutes
 import wtf.jobin.scanner.mediaAdminRoutes
+import wtf.jobin.scanner.TmdbClient
 import wtf.jobin.scanner.scannerRoutes
 import wtf.jobin.recs.RecEngineClient
 import wtf.jobin.recs.RecsRepository
@@ -45,12 +49,28 @@ import wtf.jobin.collection.collectionRoutes
 import wtf.jobin.series.seriesRoutes
 import wtf.jobin.stremio.StremioKeys
 import wtf.jobin.stremio.stremioRoutes
+import wtf.jobin.cluster.NodeRegistry
+import wtf.jobin.cluster.agentRoutes
+import wtf.jobin.cluster.agentRawRoutes
 
 fun Application.configureRouting() {
+    val appConfig by inject<AppConfig>()
+    // Phase 14 (#68): AGENT serves a minimal surface (no Hub routes). Raw byte
+    // serving (#75) mounts here later. ponytail: agent still boots DB/scanner
+    // plugins for now (module list is role-blind) — trim for NAS deploy.
+    if (appConfig.role == wtf.jobin.config.Role.AGENT) {
+        routing {
+            get("/health") { call.respondText("ok") }
+            agentRawRoutes(appConfig.cluster.enrollmentSecret, appConfig.agent.libraryRoots) // #76
+        }
+        return
+    }
     val auth by inject<AuthService>()
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
+    val tmdb by inject<TmdbClient>()
     val transcoder by inject<HlsTranscoder>()
+    val transcodeCoordinator by inject<TranscodeCoordinator>()
     val libraries by inject<LibraryRepository>()
     val libraryWatcher by inject<LibraryWatcher>()
     val musicScanner by inject<MusicScanner>()
@@ -61,11 +81,11 @@ fun Application.configureRouting() {
     val continueWatching by inject<ContinueWatchingService>()
     val partyRooms by inject<PartyRoomRepository>()
     val db by inject<R2dbcDatabase>()
-    val appConfig by inject<AppConfig>()
     val partyHub by inject<PartyHub>()
     val downloads by inject<DownloadService>()
     val collections by inject<CollectionRepository>()
     val stremioKeys by inject<StremioKeys>()
+    val nodeRegistry by inject<NodeRegistry>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -75,12 +95,14 @@ fun Application.configureRouting() {
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         mediaListRoutes(db)
+        playbackRoutes(db, stremioKeys, appConfig.publicBaseUrl)
+        homeRoutes(db)
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
         watchEventRoutes(watchEvents)
         continueWatchingRoutes(continueWatching)
         partyRoomRoutes(partyRooms, partyHub)
-        streamRoutes(db, appConfig.media, stremioKeys)
+        streamRoutes(db, appConfig.media, stremioKeys, transcodeCoordinator)
         trickplayRoutes(db, appConfig.media)
         subtitleRoutes(db, appConfig.media)
         partyWebSocketRoutes(partyHub, db)
@@ -88,7 +110,8 @@ fun Application.configureRouting() {
         collectionRoutes(collections)
         seriesRoutes(db)
         musicRoutes(db)
-        mediaAdminRoutes(db)
+        mediaAdminRoutes(db, tmdb)
+        agentRoutes(nodeRegistry, db)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
     }
     partyHub.startFlushLoop(this)

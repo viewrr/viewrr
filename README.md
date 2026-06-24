@@ -48,15 +48,34 @@ This project includes the following modules:
 | core   | null        |
 | server | null        |
 
+## Configuration & Secrets
+
+Environment is managed with [varlock](https://varlock.dev). `.env.schema` (committed)
+declares every variable, its type, and which are secret; real values live in an
+uncommitted `.env` (already git-ignored).
+
+```sh
+brew install dmno-dev/tap/varlock   # or: curl -sSfL https://varlock.dev/install.sh | sh
+cp .env.schema .env                 # then fill in real secrets (DB_PASSWORD, JWT_SECRET, TMDB_API_KEY, ...)
+varlock load                        # validate; prints resolved env (secrets redacted)
+```
+
+Defaults in `.env.schema` mirror `application.yaml`, so dev runs work without a `.env`.
+`TMDB_API_KEY` blank = poster/overview enrichment disabled (scan falls back to filename
+metadata). Get a key at <https://www.themoviedb.org/settings/api>.
+
 ## Building & Running
 
-To build or run the project, use one of the following tasks:
+Prefix any task with `varlock run --` to inject validated env into the JVM:
 
-| Task                      | Description       |
-|---------------------------|-------------------|
-| `./gradlew :server:test`  | Run the tests     |
-| `./gradlew :server:build` | Build the project |
-| `./gradlew :server:run`   | Run the server    |
+| Task                                       | Description       |
+|--------------------------------------------|-------------------|
+| `varlock run -- ./gradlew :server:test`    | Run the tests     |
+| `varlock run -- ./gradlew :server:build`   | Build the project |
+| `varlock run -- ./gradlew :server:run`     | Run the server    |
+
+(Bare `./gradlew :server:run` still works — it just relies on shell env / yaml defaults
+instead of schema-validated values.)
 
 If the server starts successfully, you'll see the following output:
 

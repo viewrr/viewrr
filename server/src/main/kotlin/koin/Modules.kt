@@ -24,6 +24,9 @@ import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.LibraryWatcher
 import wtf.jobin.scanner.MediaScanner
+import wtf.jobin.scanner.TranscodeCoordinator
+import wtf.jobin.scanner.HlsCacheManager
+import wtf.jobin.scanner.TmdbClient
 import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.Mp4Downloader
 import wtf.jobin.watch.ContinueWatchingService
@@ -52,11 +55,16 @@ val authModule = module {
 
 val scannerModule = module {
     single { Ffprobe(get<AppConfig>().media.ffprobePath) }
-    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot) }
+    single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot, get<AppConfig>().cluster.enrollmentSecret) }
+    single { TmdbClient(get<AppConfig>().media.tmdbApiKey) }
+    single { HlsCacheManager(java.nio.file.Path.of(get<AppConfig>().media.hlsRoot), get(), get<AppConfig>().media.hlsCacheMaxBytes) } // #80
+    single { TranscodeCoordinator(get(), get()) } // Phase 15 (#75/#80) lazy transcode + cache cap
     single { MediaScanner(get(), get(), get()) }
     single { LibraryRepository(get()) }
     // Eager so the watcher is ready before #35 wires start() at boot.
     single(createdAtStart = true) { LibraryWatcher(get()) }
+    // Phase 14 (#69/#73): node enrollment + token auth.
+    single { wtf.jobin.cluster.NodeRegistry(get(), get<AppConfig>().cluster.enrollmentSecret) }
 }
 
 val mediaModule = module {

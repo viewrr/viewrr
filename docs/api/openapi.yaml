@@ -1,0 +1,715 @@
+openapi: 3.1.0
+info:
+  title: viewrr Client API
+  version: "0.1.0"
+  description: |
+    Client-facing contract for viewrr — a self-hosted OTT backend (movies, TV, music).
+    This spec is the source of truth that the **viewrr-web** (Vue) and **viewrr-mobile**
+    (Compose) clients build against. It is mockable with Prism (see `mock/README.md`).
+
+    ## Auth
+    Call `POST /auth/login`, take `accessToken`, and send it as
+    `Authorization: Bearer <token>` on every other endpoint. Access tokens are short-lived
+    (~15 min) — refresh with `POST /auth/refresh`.
+
+    > **OIDC migration note:** JWTs are issued by the server's own `auth-jwt` realm today.
+    > A Keycloak OIDC migration is planned; the bearer-token contract on the client side is
+    > expected to stay the same (still `Authorization: Bearer <jwt>`), only the issuer changes.
+
+    ## Playback / streaming auth (no bearer)
+    The HLS player itself is authenticated by a **per-device stremio-key embedded in the URL
+    path**, not by a bearer header. `GET /playback/{id}` (bearer-protected) returns a fully
+    resolved `url` of the form `/stream/k/{key}/{mediaId}/playlist.m3u8`. The player fetches
+    that URL (and its relative segment/variant URIs) with no `Authorization` header. Sidecar
+    `subtitlesUrl` / `trickplayUrl` are returned absolute too.
+
+    Source of truth: Kotlin `@Serializable` DTOs under `server/src/main/kotlin/**`.
+servers:
+  - url: http://localhost:4010
+    description: Prism mock (clients point their API base here)
+  - url: http://localhost:8080
+    description: Local dev server
+  - url: "{publicBaseUrl}"
+    description: Deployment
+    variables:
+      publicBaseUrl:
+        default: http://localhost:8080
+
+tags:
+  - name: Auth
+  - name: Browse
+  - name: Detail
+  - name: Home
+  - name: Watch
+  - name: Playback
+  - name: Music
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────── Auth ─────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with username + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+            example: { username: "ada", password: "correct horse battery staple" }
+      responses:
+        "200":
+          description: Token pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+              example:
+                accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjFkIn0.sig"
+                refreshToken: "f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a fresh token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+            example: { refreshToken: "f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30" }
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+              example:
+                accessToken: "eyJhbGciOiJIUzI1NiJ9.new.sig"
+                refreshToken: "9b2e0c44-1aa7-4f0e-8d3b-2c5e6a1f7b90"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke a refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+            example: { refreshToken: "f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30" }
+      responses:
+        "204": { description: Logged out (no content) }
+
+  /me/stremio-key:
+    post:
+      tags: [Auth]
+      summary: Get this user's per-device stremio key + Stremio install URL
+      description: |
+        Returns the path-credential `key` used in keyed HLS URLs and the Stremio addon
+        install URL. The same key appears in `playback.url` from `GET /playback/{id}`.
+      responses:
+        "200":
+          description: Key + install URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StremioKey" }
+              example:
+                key: "a1b2c3d4e5f6"
+                installUrl: "http://localhost:8080/stremio/a1b2c3d4e5f6/manifest.json"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ───────────────────────── Browse / Detail ─────────────────────────
+  /media:
+    get:
+      tags: [Browse]
+      summary: Flat browse of all visible media (parental-filtered)
+      description: "`sort=createdAt&order=desc` is the \"Recently Added\" row."
+      parameters:
+        - name: sort
+          in: query
+          schema: { type: string, enum: [title, createdAt], default: title }
+          description: "`title` sorts by cleanTitle; `createdAt` by ingest time."
+        - name: order
+          in: query
+          schema: { type: string, enum: [asc, desc], default: asc }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Media list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MediaItem" }
+              example:
+                - { id: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b", title: "Blade Runner 2049 (2017)", cleanTitle: "Blade Runner 2049", showTitle: null, seasonNumber: null, episodeNumber: null, year: 2017, durationSecs: 9824, hlsPath: "movies/blade-runner-2049/playlist.m3u8", contentRating: "R", poster: "https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg", backdrop: "https://image.tmdb.org/t/p/original/ilRyazdMJwN05exqhwK4tMKBYZs.jpg", overview: "Thirty years after the events of the first film, a new blade runner unearths a long-buried secret." }
+                - { id: "b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f", title: "Dune (2021)", cleanTitle: "Dune", showTitle: null, seasonNumber: null, episodeNumber: null, year: 2021, durationSecs: 9300, hlsPath: "movies/dune/playlist.m3u8", contentRating: "PG-13", poster: "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg", backdrop: "https://image.tmdb.org/t/p/original/jYEW5xZkZk2YfXT16JZ.jpg", overview: "Paul Atreides leads nomadic tribes in a revolt against the galactic emperor." }
+
+  /media/{id}:
+    get:
+      tags: [Detail]
+      summary: Single media item (detail)
+      description: Returns 404 (not 403) when parental-hidden — existence is not leaked.
+      parameters:
+        - { $ref: "#/components/parameters/MediaId" }
+      responses:
+        "200":
+          description: Media item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaItem" }
+              example:
+                id: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
+                title: "Blade Runner 2049 (2017)"
+                cleanTitle: "Blade Runner 2049"
+                showTitle: null
+                seasonNumber: null
+                episodeNumber: null
+                year: 2017
+                durationSecs: 9824
+                hlsPath: "movies/blade-runner-2049/playlist.m3u8"
+                contentRating: "R"
+                poster: "https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg"
+                backdrop: "https://image.tmdb.org/t/p/original/ilRyazdMJwN05exqhwK4tMKBYZs.jpg"
+                overview: "Thirty years after the events of the first film, a new blade runner unearths a long-buried secret."
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /media/search:
+    get:
+      tags: [Browse]
+      summary: Full-text search across media (parental-filtered)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+          example: "dune"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, default: 20 }
+      responses:
+        "200":
+          description: Matching media
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MediaItem" }
+              example:
+                - { id: "b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f", title: "Dune (2021)", cleanTitle: "Dune", showTitle: null, seasonNumber: null, episodeNumber: null, year: 2021, durationSecs: 9300, hlsPath: "movies/dune/playlist.m3u8", contentRating: "PG-13", poster: "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg", backdrop: "https://image.tmdb.org/t/p/original/jYEW5xZkZk2YfXT16JZ.jpg", overview: "Paul Atreides leads nomadic tribes in a revolt against the galactic emperor." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /series:
+    get:
+      tags: [Browse]
+      summary: List shows (grouped TV series)
+      responses:
+        "200":
+          description: Shows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ShowView" }
+              example:
+                - { showTitle: "Severance", episodeCount: 18, seasonCount: 2 }
+                - { showTitle: "The Expanse", episodeCount: 62, seasonCount: 6 }
+
+  /series/{showTitle}:
+    get:
+      tags: [Detail]
+      summary: A single show with seasons + episodes
+      description: "`showTitle` is URL-encoded; the server auto-decodes."
+      parameters:
+        - name: showTitle
+          in: path
+          required: true
+          schema: { type: string }
+          example: "Severance"
+      responses:
+        "200":
+          description: Series detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeriesDetailView" }
+              example:
+                showTitle: "Severance"
+                seasons:
+                  - season: 1
+                    episodes:
+                      - { mediaId: "c0a1b2c3-d4e5-4f60-8a1b-2c3d4e5f6071", title: "Good News About Hell", seasonNumber: 1, episodeNumber: 1, hlsPath: "tv/severance/s01e01/playlist.m3u8" }
+                      - { mediaId: "c0a1b2c3-d4e5-4f60-8a1b-2c3d4e5f6072", title: "Half Loop", seasonNumber: 1, episodeNumber: 2, hlsPath: "tv/severance/s01e02/playlist.m3u8" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ───────────────────────── Home rows ─────────────────────────
+  /home/top:
+    get:
+      tags: [Home]
+      summary: "Top 10 by watch count (falls back to recently-added)"
+      responses:
+        "200":
+          description: Top media
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MediaItem" }
+              example:
+                - { id: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b", title: "Blade Runner 2049 (2017)", cleanTitle: "Blade Runner 2049", showTitle: null, seasonNumber: null, episodeNumber: null, year: 2017, durationSecs: 9824, hlsPath: "movies/blade-runner-2049/playlist.m3u8", contentRating: "R", poster: "https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg", backdrop: "https://image.tmdb.org/t/p/original/ilRyazdMJwN05exqhwK4tMKBYZs.jpg", overview: "Thirty years after the events of the first film, a new blade runner unearths a long-buried secret." }
+
+  /home/featured:
+    get:
+      tags: [Home]
+      summary: "Up to 8 items with backdrop art (falls back to recently-added)"
+      responses:
+        "200":
+          description: Featured media
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MediaItem" }
+              example:
+                - { id: "b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f", title: "Dune (2021)", cleanTitle: "Dune", showTitle: null, seasonNumber: null, episodeNumber: null, year: 2021, durationSecs: 9300, hlsPath: "movies/dune/playlist.m3u8", contentRating: "PG-13", poster: "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg", backdrop: "https://image.tmdb.org/t/p/original/jYEW5xZkZk2YfXT16JZ.jpg", overview: "Paul Atreides leads nomadic tribes in a revolt against the galactic emperor." }
+
+  /me/continue-watching:
+    get:
+      tags: [Home]
+      summary: Continue-watching feed (latest unfinished item per media)
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Continue-watching items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ContinueWatchingItem" }
+              example:
+                - { mediaId: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b", title: "Blade Runner 2049 (2017)", hlsPath: "movies/blade-runner-2049/playlist.m3u8", durationSecs: 9824, positionSecs: 4200, percent: 42 }
+                - { mediaId: "c0a1b2c3-d4e5-4f60-8a1b-2c3d4e5f6071", title: "Severance S01E01", hlsPath: "tv/severance/s01e01/playlist.m3u8", durationSecs: 2880, positionSecs: 600, percent: 20 }
+
+  /me/recommendations:
+    get:
+      tags: [Home]
+      summary: Pre-computed recommendations for this user
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Recommendation" }
+              example:
+                - { mediaId: "b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f", title: "Dune (2021)", hlsPath: "movies/dune/playlist.m3u8", score: 0.93, rank: 1 }
+                - { mediaId: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b", title: "Blade Runner 2049 (2017)", hlsPath: "movies/blade-runner-2049/playlist.m3u8", score: 0.88, rank: 2 }
+
+  # ───────────────────────── Watch events ─────────────────────────
+  /watch-events:
+    post:
+      tags: [Watch]
+      summary: Record a playback telemetry event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WatchEventCreate" }
+            example:
+              mediaId: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
+              positionSecs: 4200
+              eventType: "progress"
+              sessionId: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7081"
+      responses:
+        "201":
+          description: Event recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WatchEventCreated" }
+              example: { id: 90217 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /watch-events/me:
+    get:
+      tags: [Watch]
+      summary: This user's watch events for one media item
+      description: "`mediaId` is **required**. `limit` is capped at 50."
+      parameters:
+        - name: mediaId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+          example: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
+      responses:
+        "200":
+          description: Watch events (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WatchEventView" }
+              example:
+                - { id: 90217, mediaId: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b", positionSecs: 4200, eventType: "progress", sessionId: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7081", createdAt: "2026-06-23T18:42:10Z" }
+                - { id: 90201, mediaId: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b", positionSecs: 60, eventType: "start", sessionId: "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7081", createdAt: "2026-06-23T17:30:01Z" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ───────────────────────── Playback ─────────────────────────
+  /playback/{id}:
+    get:
+      tags: [Playback]
+      summary: Resolve a media id to a playable HLS URL + resume + sidecars
+      description: |
+        The single call a first-party client makes to start playback. `url` is a fully
+        resolved, **path-keyed** HLS playlist (see the `/stream/k/...` note below) so the
+        player needs no bearer token. `startPositionSecs` is the resume point from the
+        user's latest watch event (0 if none). Returns 404 if hidden by parental rating.
+      parameters:
+        - { $ref: "#/components/parameters/MediaId" }
+      responses:
+        "200":
+          description: Resolved playback
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaybackResolve" }
+              example:
+                url: "http://localhost:8080/stream/k/a1b2c3d4e5f6/7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b/playlist.m3u8"
+                type: "hls"
+                startPositionSecs: 4200
+                subtitlesUrl: "http://localhost:8080/media/7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b/subtitles"
+                trickplayUrl: "http://localhost:8080/media/7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b/trickplay"
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stream/k/{key}/{mediaId}/playlist.m3u8:
+    get:
+      tags: [Playback]
+      summary: Keyed HLS master playlist (path-credential auth, NO bearer)
+      description: |
+        **Do not call this directly with logic** — take the `url` from `GET /playback/{id}`
+        and hand it to the HLS player as-is. The `{key}` path segment IS the credential
+        (resolves to a user); no `Authorization` header is sent. The player also fetches the
+        relative segment (`*.ts`) and variant playlist URIs referenced inside the returned
+        `.m3u8`, all under the same `/stream/k/{key}/{mediaId}/` prefix. Documented here so
+        clients understand the URL shape; it is not bearer-protected.
+      security:
+        - stremioKeyInPath: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+          description: Per-device stremio key (path credential).
+          example: "a1b2c3d4e5f6"
+        - name: mediaId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          example: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
+      responses:
+        "200":
+          description: HLS master playlist
+          content:
+            application/vnd.apple.mpegurl:
+              schema: { type: string }
+              example: |
+                #EXTM3U
+                #EXT-X-VERSION:3
+                #EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080
+                stream_0/playlist.m3u8
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ───────────────────────── Music ─────────────────────────
+  /music/albums:
+    get:
+      tags: [Music]
+      summary: List albums
+      responses:
+        "200":
+          description: Albums
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Album" }
+              example:
+                - { album: "Random Access Memories", trackCount: 13, artist: "Daft Punk" }
+                - { album: "In Rainbows", trackCount: 10, artist: "Radiohead" }
+
+  /music/albums/{album}/tracks:
+    get:
+      tags: [Music]
+      summary: Tracks on an album
+      parameters:
+        - name: album
+          in: path
+          required: true
+          schema: { type: string }
+          example: "Random Access Memories"
+      responses:
+        "200":
+          description: Tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Track" }
+              example:
+                - { id: "d1e2f3a4-b5c6-4d7e-8f90-1a2b3c4d5e60", title: "Give Life Back to Music", artist: "Daft Punk", album: "Random Access Memories", albumArtist: "Daft Punk", trackNumber: 1, discNumber: 1, durationSecs: 274 }
+                - { id: "d1e2f3a4-b5c6-4d7e-8f90-1a2b3c4d5e61", title: "Get Lucky", artist: "Daft Punk", album: "Random Access Memories", albumArtist: "Daft Punk", trackNumber: 8, discNumber: 1, durationSecs: 369 }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /music/tracks/{id}/audio:
+    get:
+      tags: [Music]
+      summary: Stream the original audio file (Range-enabled)
+      description: |
+        Returns the raw audio bytes with `Accept-Ranges` support. Content-Type is the
+        track's stored MIME type (e.g. `audio/flac`, `audio/mpeg`) or octet-stream.
+      parameters:
+        - { $ref: "#/components/parameters/MediaId" }
+      responses:
+        "200":
+          description: Audio bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "206":
+          description: Partial content (Range request)
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token from `POST /auth/login`. Server-issued today; Keycloak OIDC
+        migration planned (issuer changes, client contract stays bearer-based).
+    stremioKeyInPath:
+      type: apiKey
+      in: query
+      name: key
+      description: |
+        Marker only — the real credential is the `{key}` **path segment** of
+        `/stream/k/{key}/...`, not a query param. OpenAPI has no path-segment apiKey
+        location, so this is documented as a distinct scheme to flag that these URLs are
+        NOT bearer-protected.
+
+  parameters:
+    MediaId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      example: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid credentials
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "invalid credentials" }
+    NotFound:
+      description: Not found (also returned for parental-hidden items)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "not found" }
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "q is required" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken]
+      properties:
+        accessToken: { type: string, description: Short-lived JWT (~15 min) }
+        refreshToken: { type: string }
+
+    StremioKey:
+      type: object
+      required: [key, installUrl]
+      properties:
+        key: { type: string }
+        installUrl: { type: string, format: uri }
+
+    MediaItem:
+      type: object
+      description: Browse/detail item (Kotlin `MediaListItem`). TMDb art fields are null until enriched.
+      required: [id, title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, description: Raw filename-derived title }
+        cleanTitle: { type: [string, "null"], description: Normalized display title }
+        showTitle: { type: [string, "null"], description: "Parent show, for TV episodes" }
+        seasonNumber: { type: [integer, "null"] }
+        episodeNumber: { type: [integer, "null"] }
+        year: { type: [integer, "null"] }
+        durationSecs: { type: [integer, "null"] }
+        hlsPath: { type: [string, "null"], description: Relative HLS playlist path (not a full URL) }
+        contentRating: { type: [string, "null"], description: "e.g. G, PG, PG-13, R, TV-MA" }
+        poster: { type: [string, "null"], format: uri, description: TMDb poster URL }
+        backdrop: { type: [string, "null"], format: uri, description: TMDb backdrop URL }
+        overview: { type: [string, "null"] }
+
+    ShowView:
+      type: object
+      required: [showTitle, episodeCount, seasonCount]
+      properties:
+        showTitle: { type: string }
+        episodeCount: { type: integer }
+        seasonCount: { type: integer }
+
+    EpisodeView:
+      type: object
+      required: [mediaId, title]
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        seasonNumber: { type: [integer, "null"] }
+        episodeNumber: { type: [integer, "null"] }
+        hlsPath: { type: [string, "null"] }
+
+    SeasonView:
+      type: object
+      required: [episodes]
+      properties:
+        season: { type: [integer, "null"] }
+        episodes:
+          type: array
+          items: { $ref: "#/components/schemas/EpisodeView" }
+
+    SeriesDetailView:
+      type: object
+      required: [showTitle, seasons]
+      properties:
+        showTitle: { type: string }
+        seasons:
+          type: array
+          items: { $ref: "#/components/schemas/SeasonView" }
+
+    ContinueWatchingItem:
+      type: object
+      required: [mediaId, title, positionSecs, percent]
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: [string, "null"] }
+        durationSecs: { type: [integer, "null"] }
+        positionSecs: { type: integer }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+
+    Recommendation:
+      type: object
+      required: [mediaId, title, score, rank]
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: [string, "null"] }
+        score: { type: number, format: float }
+        rank: { type: integer, description: 1-based rank }
+
+    WatchEventCreate:
+      type: object
+      required: [mediaId, positionSecs, eventType, sessionId]
+      properties:
+        mediaId: { type: string, format: uuid }
+        positionSecs: { type: integer, minimum: 0 }
+        eventType:
+          type: string
+          enum: [start, progress, pause, stop, finish]
+        sessionId: { type: string, format: uuid }
+
+    WatchEventCreated:
+      type: object
+      required: [id]
+      properties:
+        id: { type: integer, format: int64 }
+
+    WatchEventView:
+      type: object
+      required: [id, mediaId, positionSecs, eventType, sessionId, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        mediaId: { type: string, format: uuid }
+        positionSecs: { type: integer }
+        eventType: { type: string, enum: [start, progress, pause, stop, finish] }
+        sessionId: { type: string, format: uuid }
+        createdAt: { type: string, description: ISO-8601 timestamp }
+
+    PlaybackResolve:
+      type: object
+      required: [url, type, startPositionSecs, subtitlesUrl, trickplayUrl]
+      properties:
+        url: { type: string, format: uri, description: Keyed HLS master playlist URL }
+        type: { type: string, default: hls }
+        startPositionSecs: { type: integer, description: Resume position (0 if none) }
+        subtitlesUrl: { type: string, format: uri }
+        trickplayUrl: { type: string, format: uri }
+
+    Album:
+      type: object
+      required: [album, trackCount]
+      properties:
+        album: { type: string }
+        trackCount: { type: integer }
+        artist: { type: [string, "null"] }
+
+    Track:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        artist: { type: [string, "null"] }
+        album: { type: [string, "null"] }
+        albumArtist: { type: [string, "null"] }
+        trackNumber: { type: [integer, "null"] }
+        discNumber: { type: [integer, "null"] }
+        durationSecs: { type: [integer, "null"] }

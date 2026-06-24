@@ -47,6 +47,7 @@ class LibraryRepository(private val db: R2dbcDatabase) {
     suspend fun create(name: String, kind: String, rootPath: String): LibraryRow = suspendTransaction(db) {
         val now = Instant.now()
         val newId = Libraries.insertAndGetId {
+            it[Libraries.nodeId] = wtf.jobin.db.LOCAL_NODE_ID // Phase 14 (#72)
             it[Libraries.name] = name
             it[Libraries.kind] = kind
             it[Libraries.rootPath] = rootPath

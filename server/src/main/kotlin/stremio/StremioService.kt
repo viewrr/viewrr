@@ -44,12 +44,14 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
     private data class Row(
         val id: UUID, val title: String, val clean: String?, val show: String?,
         val season: Int?, val episode: Int?, val year: Int?, val duration: Int?, val rating: String?,
+        val poster: String?, val backdrop: String?, val overview: String?,
     )
 
     private fun ResultRow.toRow() = Row(
         this[MediaItems.id].value, this[MediaItems.title], this[MediaItems.cleanTitle],
         this[MediaItems.showTitle], this[MediaItems.seasonNumber], this[MediaItems.episodeNumber],
         this[MediaItems.year]?.toInt(), this[MediaItems.durationSecs], this[MediaItems.contentRating],
+        this[MediaItems.poster], this[MediaItems.backdrop], this[MediaItems.overview],
     )
 
     suspend fun movieCatalog(userId: UUID, search: String?): List<StMetaPreview> {
@@ -61,7 +63,7 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
             .filter { isVisible(max, it.rating) }
             .filter { search == null || (it.clean ?: it.title).contains(search, ignoreCase = true) }
             .sortedBy { (it.clean ?: it.title).lowercase() }
-            .map { StMetaPreview("viewrr:movie:${it.id}", "movie", it.clean ?: it.title, releaseInfo = it.year?.toString()) }
+            .map { StMetaPreview("viewrr:movie:${it.id}", "movie", it.clean ?: it.title, poster = it.poster, releaseInfo = it.year?.toString(), description = it.overview) }
     }
 
     suspend fun seriesCatalog(userId: UUID, search: String?): List<StMetaPreview> {
@@ -85,7 +87,7 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
                 val r = suspendTransaction(db) {
                     MediaItems.selectAll().where { MediaItems.id eq uuid }.map { it.toRow() }.firstOrNull()
                 }?.takeIf { isVisible(max, it.rating) } ?: return null
-                StMeta(id, "movie", r.clean ?: r.title, releaseInfo = r.year?.toString(), runtime = r.duration?.let { "${it / 60}m" })
+                StMeta(id, "movie", r.clean ?: r.title, poster = r.poster, background = r.backdrop, description = r.overview, releaseInfo = r.year?.toString(), runtime = r.duration?.let { "${it / 60}m" })
             }
             type == "series" && id.startsWith("viewrr:show:") -> {
                 val show = runCatching { decShow(id.removePrefix("viewrr:show:")) }.getOrNull() ?: return null
