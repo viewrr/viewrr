@@ -43,3 +43,25 @@ jobs:
           append_body: true
           body: |
             Container image: `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+
+      # Trigger a redeploy of the viewrr app on Dokploy — it pulls the image Jib just
+      # pushed to GHCR (point the Dokploy app at ghcr.io/${{ github.repository }}:latest).
+      - name: Deploy to Dokploy
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }} # e.g. https://dokploy.example.com (no trailing slash)
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }} # Dokploy profile -> generate API token
+          DOKPLOY_APP_ID: ${{ secrets.DOKPLOY_APP_ID }} # the viewrr application id in Dokploy
+        run: |
+          set -euo pipefail
+          if [ -z "${DOKPLOY_URL:-}" ] || [ -z "${DOKPLOY_API_KEY:-}" ] || [ -z "${DOKPLOY_APP_ID:-}" ]; then
+            echo "::error::Set repo secrets DOKPLOY_URL, DOKPLOY_API_KEY, DOKPLOY_APP_ID"
+            exit 1
+          fi
+          echo "Deploying ${GITHUB_REF_NAME} to Dokploy app ${DOKPLOY_APP_ID}…"
+          curl -fsS -X POST "${DOKPLOY_URL}/api/application.deploy" \
+            -H "x-api-key: ${DOKPLOY_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"applicationId\":\"${DOKPLOY_APP_ID}\"}"
+          echo "Dokploy deploy triggered."
+          # No API key? Give the app a Deploy Webhook in Dokploy and instead run:
+          #   curl -fsS -X POST "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}"
