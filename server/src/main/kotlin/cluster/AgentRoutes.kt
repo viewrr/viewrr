@@ -2,6 +2,7 @@ package wtf.jobin.cluster
 
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -55,8 +56,10 @@ fun Route.agentRoutes(registry: NodeRegistry, db: R2dbcDatabase) {
     // #69: enrollment-secret -> nodeId + token.
     post("/agent/register") {
         val req = call.receive<RegisterRequest>()
+        // #79: the node's IP as the Hub sees it on the LAN — the locality (same-LAN) heuristic.
+        val egressIp = call.request.origin.remoteHost
         val r = try {
-            registry.register(req.enrollmentSecret, req.name, req.meshAddress, req.clientAddress)
+            registry.register(req.enrollmentSecret, req.name, req.meshAddress, req.clientAddress, egressIp)
         } catch (_: NodeRegistry.BadEnrollment) {
             return@post call.respond(HttpStatusCode.Unauthorized)
         }

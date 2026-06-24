@@ -38,6 +38,7 @@ class NodeRegistry(
         name: String,
         meshAddress: String?,
         clientAddress: String?,
+        egressIp: String? = null, // #79: node IP as the Hub saw the register request (same-LAN heuristic)
     ): Registered {
         if (secret != enrollmentSecret) throw BadEnrollment()
         val token = b64.encodeToString(ByteArray(32).also(rng::nextBytes))
@@ -46,6 +47,7 @@ class NodeRegistry(
                 it[Nodes.name] = name
                 it[Nodes.meshAddress] = meshAddress
                 it[Nodes.clientAddress] = clientAddress
+                it[Nodes.egressIp] = egressIp
                 it[Nodes.tokenHash] = sha256(token)
                 it[Nodes.createdAt] = Instant.now()
             }.value
