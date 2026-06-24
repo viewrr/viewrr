@@ -21,6 +21,8 @@ data class UserSession(val userId: String, val isAdmin: Boolean)
 
 fun Application.configureSecurity() {
     val cfg by inject<AppConfig>()
+    // #97: stateless AGENT has no Redis/JWT — it serves only register + /raw (token-guarded).
+    if (cfg.role == wtf.jobin.config.Role.AGENT) return
     val redis by inject<RedisAsyncCommands<String, String>>()
     val sessionTtlSecs = cfg.auth.refreshTtlDays * 86_400L
 

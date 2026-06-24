@@ -23,19 +23,26 @@ fun Application.configureKoin() {
     assertProdSafe(appConfig)
     install(Koin) {
         slf4jLogger()
-        modules(
-            module { single { appConfig } },
-            dbModule,
-            redisModule,
-            authModule,
-            scannerModule,
-            mediaModule,
-            recsModule,
-            watchModule,
-            partyModule,
-            downloadsModule,
-            collectionModule,
-            musicModule,
-        )
+        // Phase 15 (#97): AGENT is stateless — only config. It owns no DB/Redis and runs just
+        // register + raw-serve, so loading the data modules (which open Postgres/Redis at boot)
+        // is both wasteful and a hard dependency a NAS agent shouldn't have.
+        if (appConfig.role == wtf.jobin.config.Role.AGENT) {
+            modules(module { single { appConfig } })
+        } else {
+            modules(
+                module { single { appConfig } },
+                dbModule,
+                redisModule,
+                authModule,
+                scannerModule,
+                mediaModule,
+                recsModule,
+                watchModule,
+                partyModule,
+                downloadsModule,
+                collectionModule,
+                musicModule,
+            )
+        }
     }
 }
