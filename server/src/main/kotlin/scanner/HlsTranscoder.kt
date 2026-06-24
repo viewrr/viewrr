@@ -14,6 +14,8 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import wtf.jobin.db.LOCAL_NODE_ID
 import wtf.jobin.db.MediaItems
 import wtf.jobin.db.Nodes
+import wtf.jobin.stremio.CapabilityProfile // #78
+import wtf.jobin.stremio.profileKeyOf // #78
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
@@ -35,7 +37,19 @@ class HlsTranscoder(
      * Returns the absolute path to `playlist.m3u8` and updates `media_items.hls_path`.
      * Throws if any ffmpeg pass exits non-zero; message includes the tail of merged stdout+stderr.
      */
-    suspend fun transcode(mediaId: UUID): Path {
+    suspend fun transcode(mediaId: UUID): Path = transcode(mediaId, null) // #78: null profile = today's full-ladder behavior
+
+    /**
+     * #78: profile-aware transcode. When [profile] == null this is EXACTLY today's behavior
+     * (direct-play remux when eligible, else the full ABR ladder). When [profile] != null we
+     * emit a SINGLE rendition capped to the profile's maxHeight / maxBitrateKbps (reusing the
+     * Rendition machinery with one entry), and direct-play remux only when the source already
+     * satisfies the profile and is remux-eligible.
+     *
+     * Cache layout is profile-aware: {hlsRoot}/{libraryId}/{mediaId}/{profileKey}/hls/, where
+     * profileKey == "default" for the null profile (today's layout plus one "/default" segment).
+     */
+    suspend fun transcode(mediaId: UUID, profile: CapabilityProfile?): Path {
         val (libraryId, originalPath, nodeId) = suspendTransaction(db) {
             MediaItems.select(MediaItems.libraryId, MediaItems.originalPath, MediaItems.nodeId)
                 .where { MediaItems.id eq mediaId }
@@ -46,13 +60,20 @@ class HlsTranscoder(
         // (token in query so the rest of the transcoder is untouched). ffmpeg/ffprobe read URLs natively.
         val inputPath = resolveSource(nodeId, originalPath)
 
-        val outDir = Path.of(hlsRoot, libraryId.toString(), mediaId.toString(), "hls")
+        // #78 / ponytail: per-(media,profile) cache dir. profileKeyOf(null) == "default".
+        val profileKey = profileKeyOf(profile)
+        val outDir = Path.of(hlsRoot, libraryId.toString(), mediaId.toString(), profileKey, "hls")
         val playlist = outDir.resolve("playlist.m3u8")
 
         // ponytail: direct-play = single-rendition stream-copy; no ABR ladder for already-compatible
         // sources (CPU/quality win). Re-encode path unchanged for everything else.
+        // #78: with a profile we additionally require the source to satisfy the profile's ceilings
+        // (a too-large source must be re-encoded down even if it would otherwise direct-play).
         val codecs = withContext(Dispatchers.IO) { probeSourceCodecs(inputPath) }
-        if (isDirectPlayEligible(inputPath, codecs)) {
+        val dimsForRemux = if (profile != null) withContext(Dispatchers.IO) { probeDimensions(inputPath) } else null
+        val remuxOk = isDirectPlayEligible(inputPath, codecs) &&
+            (profile == null || profileSatisfiedBy(dimsForRemux, codecs, profile)) // #78
+        if (remuxOk) {
             remux(inputPath, outDir)
             val absPlaylist = playlist.toAbsolutePath()
             suspendTransaction(db) {
@@ -67,7 +88,8 @@ class HlsTranscoder(
         withContext(Dispatchers.IO) {
             Files.createDirectories(outDir)
             val dims = probeDimensions(inputPath)
-            val renditions = buildRenditions(dims)
+            // #78: a profile yields ONE targeted rendition; null profile = today's full ladder.
+            val renditions = if (profile != null) buildProfileRenditions(dims, profile) else buildRenditions(dims)
             val audioTracks = probeAudioTracks(inputPath)
             // ponytail: single audio group "aud"; per-track bitrate fixed at 128k.
             // Multi-audio only with a real video probe AND >=2 audio tracks; the dims
@@ -265,6 +287,60 @@ class HlsTranscoder(
             }
             Rendition(name = "v$h", w = w, h = h, br = br, scaleFilter = "scale=$w:$h")
         }
+    }
+
+    /**
+     * #78: a SINGLE rendition targeted at the device's [profile]. Reuses the [Rendition] machinery
+     * (one entry) so master-playlist / ffmpeg paths are unchanged. Downscale-only: the target
+     * height is min(profile ceiling, source height) — we never upscale. Bitrate is the profile's
+     * ceiling when given, else the same height-derived default the ladder uses.
+     */
+    private fun buildProfileRenditions(dims: Pair<Int, Int>?, profile: CapabilityProfile): List<Rendition> {
+        val cap = profile.maxHeight
+        fun defaultBr(h: Int) = when {
+            h >= 1080 -> 5000
+            h >= 720 -> 2800
+            h >= 480 -> 1400
+            h >= 360 -> 800
+            else -> 500
+        }
+        if (dims == null) {
+            // Probe failed: encode at native resolution (no scale filter). Honor the bitrate
+            // ceiling if present, otherwise the ladder's probe-failure default (2800).
+            val br = profile.maxBitrateKbps ?: 2800
+            return listOf(Rendition(name = "vsrc", w = null, h = null, br = br, scaleFilter = null))
+        }
+        val (srcW, srcH) = dims
+        val h = if (cap != null) minOf(cap, srcH) else srcH // downscale-only
+        val br = profile.maxBitrateKbps ?: defaultBr(h)
+        return if (h == srcH) {
+            // Target == source height: no scaling needed (same as the ladder's native rung).
+            listOf(Rendition(name = "v$h", w = srcW, h = srcH, br = br, scaleFilter = null))
+        } else {
+            val w = ((srcW * h) / srcH / 2) * 2
+            listOf(Rendition(name = "v$h", w = w, h = h, br = br, scaleFilter = "scale=$w:$h"))
+        }
+    }
+
+    /**
+     * #78: true when the source already fits within the [profile]'s ceilings, so a direct-play
+     * remux is safe (no down-scale / down-bitrate needed). Codec membership is checked only when
+     * the profile lists codecs; a too-tall source fails the height ceiling. [dims] null (probe
+     * failed) means we can't prove it fits → not satisfied, so we re-encode to be safe.
+     */
+    private fun profileSatisfiedBy(dims: Pair<Int, Int>?, codecs: SourceCodecs, profile: CapabilityProfile): Boolean {
+        val cap = profile.maxHeight
+        if (cap != null) {
+            val srcH = dims?.second ?: return false
+            if (srcH > cap) return false
+        }
+        if (profile.codecs.isNotEmpty()) {
+            val vc = codecs.videoCodec ?: return false
+            if (vc !in profile.codecs) return false
+        }
+        // Bitrate ceiling isn't probed cheaply here; the remux path is already restricted to
+        // h264/yuv420p sources by isDirectPlayEligible, so a height-fit source is a safe remux.
+        return true
     }
 
     /**

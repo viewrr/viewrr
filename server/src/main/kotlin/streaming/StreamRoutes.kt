@@ -38,28 +38,39 @@ fun Route.streamRoutes(
         // Stremio/HLS: key as a path PREFIX so the playlist's relative segment + variant URIs
         // (seg_000.ts, v0.m3u8) resolve under it. HLS players drop ?query on relative refs.
         get("/k/{key}/{media_id}/{file}") {
-            val uid = call.parameters["key"]?.let { stremioKeys.resolve(it) } ?: throw NotFoundException()
-            serveHlsFile(call, db, hlsRoot, uid, coordinator)
+            val key = call.parameters["key"] ?: throw NotFoundException()
+            val uid = stremioKeys.resolve(key) ?: throw NotFoundException()
+            // #77/#78: the key carries the device's capability profile (null = default dir).
+            val profile = stremioKeys.resolveProfile(key)
+            serveHlsFile(call, db, hlsRoot, uid, coordinator, profile)
         }
         // optional JWT: browser/app clients send Bearer; single-file fetches may pass ?key=
         authenticate("auth-jwt", optional = true) {
             get("/{media_id}/{file}") {
-                val uid = call.principal<JWTPrincipal>()?.subject?.let { UUID.fromString(it) }
-                    ?: call.request.queryParameters["key"]?.let { stremioKeys.resolve(it) }
+                // #78: a JWT-only client has no key → no profile → "default" dir (today's path).
+                // A ?key= client uses that key's profile, so its segment requests hit the same dir
+                // the player's playlist was served from.
+                val jwtUid = call.principal<JWTPrincipal>()?.subject?.let { UUID.fromString(it) }
+                val keyParam = call.request.queryParameters["key"]
+                val uid = jwtUid
+                    ?: keyParam?.let { stremioKeys.resolve(it) }
                     ?: throw NotFoundException()
-                serveHlsFile(call, db, hlsRoot, uid, coordinator)
+                val profile = if (jwtUid == null) keyParam?.let { stremioKeys.resolveProfile(it) } else null
+                serveHlsFile(call, db, hlsRoot, uid, coordinator, profile)
             }
         }
     }
 }
 
-// Serves one file from {hlsRoot}/{libraryId}/{mediaId}/hls/, parental-gated for `uid`.
+// Serves one file from {hlsRoot}/{libraryId}/{mediaId}/{profileKey}/hls/, parental-gated for `uid`.
+// #78: profileKey == "default" when [profile] is null (today's layout plus one "/default" segment).
 private suspend fun serveHlsFile(
     call: io.ktor.server.application.ApplicationCall,
     db: R2dbcDatabase,
     hlsRoot: Path,
     uid: UUID,
     coordinator: wtf.jobin.scanner.TranscodeCoordinator,
+    profile: wtf.jobin.stremio.CapabilityProfile?,
 ) {
     val file = call.parameters["file"]!!
     // Path traversal guard: any separator or parent ref → 404 (don't leak).
@@ -84,16 +95,19 @@ private suspend fun serveHlsFile(
     val max = wtf.jobin.rating.maxRatingFor(db, uid)
     if (!wtf.jobin.rating.isVisible(max, contentRating)) throw NotFoundException()
 
+    // #78: profile-aware cache dir. profileKeyOf(null) == "default" → today's layout under /default.
+    val profileKey = wtf.jobin.stremio.profileKeyOf(profile)
     val target = hlsRoot
         .resolve(libraryId.toString())
         .resolve(mediaId.toString())
+        .resolve(profileKey)
         .resolve("hls")
         .resolve(file)
     // Phase 15 (#75): lazy transcode. The master playlist is the first thing an HLS player
     // fetches; if it isn't built yet, transcode now (deduped) and then serve. Segment/variant
     // requests arrive only after the playlist exists, so they never trigger a transcode.
     if (file == "playlist.m3u8" && !Files.isRegularFile(target)) {
-        coordinator.ensure(mediaId, target)
+        coordinator.ensure(mediaId, target, profile) // #78: build the profile-targeted rendition
     }
     if (!Files.isRegularFile(target)) throw NotFoundException()
     // Phase 15 (#80): touch the playlist on serve as the LRU access signal for cache eviction.

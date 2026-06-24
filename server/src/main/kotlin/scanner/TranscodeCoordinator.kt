@@ -2,6 +2,7 @@ package wtf.jobin.scanner
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import wtf.jobin.stremio.CapabilityProfile // #78
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -22,11 +23,15 @@ class TranscodeCoordinator(
 ) {
     private val locks = ConcurrentHashMap<UUID, Mutex>()
 
-    suspend fun ensure(mediaId: UUID, playlist: Path) {
+    // #78: [profile] selects the targeted single rendition (null = today's full ladder). The
+    // caller computes the profile-specific [playlist] path ({mediaId}/{profileKey}/hls/...), so
+    // the existence checks here are per-(media,profile). The Mutex is still per-media: distinct
+    // profiles for one media serialize (fine for a personal library) but never collide on disk.
+    suspend fun ensure(mediaId: UUID, playlist: Path, profile: CapabilityProfile? = null) {
         if (Files.isRegularFile(playlist)) return
         locks.computeIfAbsent(mediaId) { Mutex() }.withLock {
             if (Files.isRegularFile(playlist)) return // built while we waited on the lock
-            transcoder.transcode(mediaId)
+            transcoder.transcode(mediaId, profile)
         }
         // Phase 15 (#80): bound the cache after adding to it; pin the media we just built.
         cache.sweep(pin = mediaId)
