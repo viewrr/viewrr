@@ -95,7 +95,7 @@ fun Application.configureRouting() {
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         mediaListRoutes(db)
-        playbackRoutes(db, stremioKeys, appConfig.publicBaseUrl)
+        playbackRoutes(db, stremioKeys, appConfig.publicBaseUrl, appConfig.cluster.enrollmentSecret) // #79
         homeRoutes(db)
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
