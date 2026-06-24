@@ -111,7 +111,7 @@ fun Application.configureRouting() {
         seriesRoutes(db)
         musicRoutes(db)
         mediaAdminRoutes(db, tmdb)
-        agentRoutes(nodeRegistry)
+        agentRoutes(nodeRegistry, db)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
     }
     partyHub.startFlushLoop(this)
