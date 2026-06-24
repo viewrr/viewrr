@@ -3,6 +3,7 @@ package wtf.jobin.stremio
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.server.request.* // #77: receiveNullable for the optional profile body
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.encodeToString
@@ -28,7 +29,11 @@ fun Route.stremioRoutes(db: R2dbcDatabase, media: AppConfig.Media, publicBaseUrl
     authenticate("auth-jwt") {
         post("/me/stremio-key") {
             val uid = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
-            val key = keys.keyFor(uid)
+            // #77: optional capability profile in the body. No body / empty body / unparseable
+            // → null = the default no-profile key (today's behavior). receiveNullable returns
+            // null on an empty body; the catch covers malformed/non-JSON payloads.
+            val profile = runCatching { call.receiveNullable<CapabilityProfile>() }.getOrNull()
+            val key = keys.keyFor(uid, profile)
             call.respond(
                 mapOf(
                     "key" to key,
