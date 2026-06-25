@@ -60,9 +60,16 @@ class HlsTranscoder(
         // when one exists, falling back to the legacy media_items.node_id/original_path. The V13
         // backfill gives every existing Title exactly one Copy mirroring those legacy columns, so
         // the single-copy case (today) resolves to the identical (nodeId, originalPath) and the
-        // produced stream is byte-identical. ponytail: resolveCopy picks any copy for now;
-        // online-aware selection that prefers an online node is #85.
+        // produced stream is byte-identical.
+        // #85: resolveCopy is now online-aware — it returns a copy on an online node (LOCAL_NODE_ID
+        // is always-online), or null when every copy is offline. We KEEP the legacy media_items
+        // fallback so the single-copy local case stays byte-identical even when no media_copies row
+        // is online/present (don't break today's single-box install).
         val copy = wtf.jobin.db.resolveCopy(db, mediaId)
+        // #86: no online copy for this Title -> fire the re-acquire trigger (logging stub until
+        // Phase 17). We still proceed via the legacy fallback so the single-box case transcodes;
+        // the trigger is idempotent/debounced so a transcode retry-loop won't spam it.
+        if (copy == null) wtf.jobin.media.ReacquireService.trigger(mediaId)
         val srcNodeId = copy?.nodeId ?: nodeId
         val srcPath = copy?.originalPath ?: originalPath
         // Phase 15 (#74): source is a local file (local node) or the owning Node's /raw URL
