@@ -100,8 +100,10 @@ Self-hosted, static (no SaaS). `docs/scalar/` renders `docs/api/openapi.yaml` vi
 - Dokploy → new **Application**, source = this repo, **Dockerfile path `docs/scalar/Dockerfile`**,
   build context **`/`** (root — the image copies the spec from `docs/api/`).
 - Domain: **docs.viewrr.stream** (Traefik TLS). Serves on :80.
-- The spec is baked into the image at build, so redeploy the docs app whenever `openapi.yaml`
-  changes (or add it to the release workflow later).
+**Auto-deploy on main push:** use Dokploy's **GitHub provider** for the docs app (repo
+`viewrr/viewrr`, branch `main`, Dockerfile `docs/scalar/Dockerfile`, build context `/`) and
+toggle **Auto Deploy ON**. Dokploy installs the webhook and rebuilds docs on every push to main.
+No GitHub Action needed.
 
 ## Notes
 - Single-Hub deploy works today. Multi-Node (media on a NAS, Hub pulls over the mesh) needs the

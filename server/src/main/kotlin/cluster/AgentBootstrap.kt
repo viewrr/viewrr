@@ -1,6 +1,7 @@
 package wtf.jobin.cluster
 
 import io.ktor.server.application.*
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -76,5 +77,21 @@ fun Application.configureAgent() {
     launch {
         runCatching { scanner.scanAndPush() }
             .onFailure { log.error("Agent: scan/push failed", it) }
+    }
+
+    // #83: heartbeat loop — stamp last_seen on the Hub every 30s so it knows we're online.
+    launch {
+        val hbUrl = URI.create("${cfg.agent.hubBaseUrl.trimEnd('/')}/agent/heartbeat")
+        while (isActive) {
+            kotlinx.coroutines.delay(30_000)
+            runCatching {
+                val token = json.decodeFromString<RegisterResponse>(Files.readString(tokenPath)).token
+                val hb = HttpRequest.newBuilder(hbUrl)
+                    .header("X-Viewrr-Token", token)
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build()
+                HttpClient.newHttpClient().send(hb, HttpResponse.BodyHandlers.discarding())
+            }.onFailure { log.warn("Agent: heartbeat failed: ${it.message}") }
+        }
     }
 }

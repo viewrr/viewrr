@@ -22,6 +22,10 @@ import java.util.UUID
  * ponytail: every register() mints a new node. Re-register/refresh-by-id and heartbeat
  * are separate issues (#83); not needed until the Agent binary calls this.
  */
+/** #83: a node is online if it heartbeat within the window (default 90s). null = never seen = offline. */
+fun nodeOnline(lastSeenAt: Instant?, now: Instant = Instant.now(), windowSecs: Long = 90): Boolean =
+    lastSeenAt != null && java.time.Duration.between(lastSeenAt, now).seconds <= windowSecs
+
 class NodeRegistry(
     private val db: R2dbcDatabase,
     private val enrollmentSecret: String,

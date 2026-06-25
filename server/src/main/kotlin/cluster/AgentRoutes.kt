@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import wtf.jobin.db.Libraries
 import wtf.jobin.db.MediaItems
+import wtf.jobin.db.Nodes
 import java.nio.file.Path
 import java.time.Instant
 import java.util.UUID
@@ -64,6 +65,17 @@ fun Route.agentRoutes(registry: NodeRegistry, db: R2dbcDatabase) {
             return@post call.respond(HttpStatusCode.Unauthorized)
         }
         call.respond(RegisterResponse(r.nodeId.toString(), r.token))
+    }
+
+    // #83: agent liveness. Token -> nodeId -> stamp last_seen_at. Online status is derived
+    // from this (nodeOnline()), used by locality (#79) and disabled-catalog (#84).
+    post("/agent/heartbeat") {
+        val token = call.request.headers["X-Viewrr-Token"]
+        val nodeId = token?.let { registry.resolve(it) } ?: return@post call.respond(HttpStatusCode.Unauthorized)
+        suspendTransaction(db) {
+            Nodes.update({ Nodes.id eq nodeId }) { it[lastSeenAt] = Instant.now() }
+        }
+        call.respond(HttpStatusCode.NoContent)
     }
 
     // #81: agent pushes its scanned media. Auth = the per-node token (resolved to nodeId).

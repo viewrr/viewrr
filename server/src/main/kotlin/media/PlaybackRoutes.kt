@@ -145,9 +145,8 @@ private suspend fun localityUrl(
     val (egressIp, clientAddress, lastSeenAt) = node
     if (egressIp.isNullOrBlank() || egressIp != clientEgressIp) return null // not same-LAN
     if (clientAddress.isNullOrBlank()) return null // no client-plane address to point at
-    // ponytail: null last_seen = online-ish for now (see #83 note above).
-    val onlineIsh = lastSeenAt == null || Duration.between(lastSeenAt, Instant.now()) <= ONLINE_WINDOW
-    if (!onlineIsh) return null
+    // #83: real online check — heartbeat stamps last_seen; null = never-seen = offline.
+    if (!wtf.jobin.cluster.nodeOnline(lastSeenAt)) return null
     // Same URL shape as HlsTranscoder.resolveSource: token + path in query, path LAST.
     val tok = URLEncoder.encode(enrollmentSecret, "UTF-8")
     val p = URLEncoder.encode(originalPath, "UTF-8")
