@@ -27,7 +27,20 @@ volumes:
 `pgcrypto` is created by the app's Flyway migration; ParadeDB ships `pg_search`. (Stock postgres
 works ONLY if you don't need full-text search — not recommended.)
 
-**Redis — stock is fine.** Dokploy → Databases → Redis (one-click).
+**Redis — use the OFFICIAL image, not Dokploy's one-click.** The one-click template pulls a
+`bitnami/redis` tag that no longer exists (Bitnami pulled most Docker Hub tags in 2025:
+`docker.io/bitnami/redis:8.2.0: not found`). Add Redis as a Compose/Docker service:
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - viewrr-redis:/data
+volumes:
+  viewrr-redis:
+```
 
 Both live in the same project → the app reaches them by their internal service hostname.
 
@@ -79,6 +92,16 @@ git tag v0.1.0 && git push origin v0.1.0
 ```
 CI builds → GHCR → GitHub Release (changelog) → Dokploy redeploys. First boot runs Flyway
 migrations against the Dokploy Postgres automatically.
+
+## API docs (Scalar) at docs.viewrr.stream
+
+Self-hosted, static (no SaaS). `docs/scalar/` renders `docs/api/openapi.yaml` via Scalar.
+
+- Dokploy → new **Application**, source = this repo, **Dockerfile path `docs/scalar/Dockerfile`**,
+  build context **`/`** (root — the image copies the spec from `docs/api/`).
+- Domain: **docs.viewrr.stream** (Traefik TLS). Serves on :80.
+- The spec is baked into the image at build, so redeploy the docs app whenever `openapi.yaml`
+  changes (or add it to the release workflow later).
 
 ## Notes
 - Single-Hub deploy works today. Multi-Node (media on a NAS, Hub pulls over the mesh) needs the
