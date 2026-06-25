@@ -61,7 +61,7 @@ class MusicProbe(private val binaryPath: String) {
     private fun guessMime(file: Path): String? = when (file.extension.lowercase()) {
         "mp3" -> "audio/mpeg"
         "flac" -> "audio/flac"
-        "m4a", "aac" -> "audio/mp4"
+        "m4a", "aac", "m4b" -> "audio/mp4" // #96: m4b audiobooks are MP4 audio
         "wav" -> "audio/wav"
         "ogg", "opus" -> "audio/ogg"
         else -> null

@@ -18,7 +18,9 @@ import java.util.UUID
 import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 
-private val AUDIO_EXTS = setOf("mp3", "flac", "m4a", "wav", "aac", "ogg", "opus")
+// #96: audiobooks ride the music path. m4b is the standard audiobook container (MP4 audio
+// with chapters). Indexed as music_tracks and served by /music/tracks/{id}/audio unchanged.
+private val AUDIO_EXTS = setOf("mp3", "flac", "m4a", "wav", "aac", "ogg", "opus", "m4b")
 
 /** Mirrors [wtf.jobin.scanner.MediaScanner] for audio: probe tags, index, prune. No transcode. */
 class MusicScanner(
