@@ -74,6 +74,25 @@ object MediaItems : UUIDTable("media_items") {
     val updatedAt = timestamp("updated_at")
 }
 
+// #82 (ADR-0002): physical Copy layer. media_items stays the logical Title; a
+// Copy is one actual file on one node. Many Copies can point at the same Title
+// (the same movie reported by two nodes is one Title + two Copies, not a dup).
+// ponytail: codecs is a free-text codec summary (e.g. "h264/aac"); null until a
+// probe fills it. Legacy media_items.node_id/original_path/hls_path stay as the
+// single-copy fallback (see resolveCopy / V13) until #85 cleanup.
+object MediaCopies : UUIDTable("media_copies") {
+    val titleId = reference("title_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
+    val nodeId = reference("node_id", Nodes.id, onDelete = ReferenceOption.CASCADE)
+    val originalPath = text("original_path")
+    val sizeBytes = long("size_bytes").nullable()
+    val codecs = text("codecs").nullable()
+    val hlsPath = text("hls_path").nullable()
+    val createdAt = timestamp("created_at")
+    val updatedAt = timestamp("updated_at")
+
+    init { uniqueIndex(nodeId, originalPath) } // one copy per (node, path)
+}
+
 object WatchEvents : Table("watch_events") {
     val id = long("id").autoIncrement()
     val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
