@@ -1,5 +1,6 @@
 package wtf.jobin.media
 
+import io.ktor.http.* // #84: HttpStatusCode.ServiceUnavailable for the unavailable-title path
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.NotFoundException
@@ -68,6 +69,17 @@ fun Route.playbackRoutes(
             if (!isVisible(maxRatingFor(db, uid), found.first)) throw NotFoundException()
             val nodeId = found.second
             val originalPath = found.third
+
+            // #84: a Title with no online copy is visible but not currently playable. Return an
+            // explicit "unavailable" (503) rather than a Hub URL that would later 500/404 when the
+            // transcode source can't be reached — never crash, never hide. #86: fire the idempotent
+            // re-acquire trigger so the missing media can be re-fetched later (Phase 17).
+            // ponytail: hasOnlineCopy treats LOCAL_NODE_ID as always-online, so single-box installs
+            // never hit this path — today's local playback is byte-for-byte unchanged.
+            if (!wtf.jobin.db.hasOnlineCopy(db, id)) {
+                wtf.jobin.media.ReacquireService.trigger(id)
+                return@get call.respond(HttpStatusCode.ServiceUnavailable, "title currently unavailable (offline)")
+            }
 
             val key = stremioKeys.keyFor(uid)
             val base = publicBaseUrl.trimEnd('/')

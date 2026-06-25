@@ -8,6 +8,8 @@ import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import wtf.jobin.db.MediaItems
+import wtf.jobin.db.hasOnlineCopy // #84
+import wtf.jobin.media.ReacquireService // #84/#86
 import wtf.jobin.rating.isVisible
 import wtf.jobin.rating.maxRatingFor
 import java.util.Base64
@@ -63,7 +65,14 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
             .filter { isVisible(max, it.rating) }
             .filter { search == null || (it.clean ?: it.title).contains(search, ignoreCase = true) }
             .sortedBy { (it.clean ?: it.title).lowercase() }
-            .map { StMetaPreview("viewrr:movie:${it.id}", "movie", it.clean ?: it.title, poster = it.poster, releaseInfo = it.year?.toString(), description = it.overview) }
+            // #84: a Title with zero online copies stays listed but is marked " (offline)" and
+            // yields no playable stream (see streams()). hasOnlineCopy treats LOCAL_NODE_ID copies
+            // as always-online, so single-box installs never show as offline.
+            .map { r ->
+                val baseName = r.clean ?: r.title
+                val name = if (hasOnlineCopy(db, r.id)) baseName else "$baseName (offline)"
+                StMetaPreview("viewrr:movie:${r.id}", "movie", name, poster = r.poster, releaseInfo = r.year?.toString(), description = r.overview)
+            }
     }
 
     suspend fun seriesCatalog(userId: UUID, search: String?): List<StMetaPreview> {
@@ -76,7 +85,13 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
             .groupBy { it.show!! }
             .filter { (show, _) -> search == null || show.contains(search, ignoreCase = true) }
             .toSortedMap()
-            .map { (show, _) -> StMetaPreview("viewrr:show:${encShow(show)}", "series", show) }
+            // #84: mark a show " (offline)" only when NONE of its episodes have an online copy
+            // (a show with at least one playable episode is still browsable). Listed either way.
+            .map { (show, eps) ->
+                val anyOnline = eps.any { hasOnlineCopy(db, it.id) }
+                val name = if (anyOnline) show else "$show (offline)"
+                StMetaPreview("viewrr:show:${encShow(show)}", "series", name)
+            }
     }
 
     suspend fun meta(userId: UUID, type: String, id: String): StMeta? {
@@ -136,6 +151,14 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
 
     suspend fun streams(userId: UUID, key: String, id: String): List<StStream> {
         val uuid = resolveStreamId(userId, id) ?: return emptyList()
+        // #84: a Title with no online copy is listed but not playable -> return no stream (never a
+        // 500/crash, never hidden). #86: fire the (idempotent, debounced) re-acquire trigger so the
+        // missing media can be re-fetched later (Phase 17). hasOnlineCopy treats LOCAL_NODE_ID as
+        // always-online, so single-box installs always have a stream here.
+        if (!hasOnlineCopy(db, uuid)) {
+            ReacquireService.trigger(uuid)
+            return emptyList()
+        }
         // Key as a PATH prefix (not ?query): HLS players drop the query when resolving the
         // relative segment/variant URIs inside the playlist, so query-based auth 404s the segments.
         return listOf(StStream(url = "$publicBaseUrl/stream/k/$key/$uuid/playlist.m3u8", name = "viewrr"))

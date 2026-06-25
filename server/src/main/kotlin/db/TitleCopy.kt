@@ -2,9 +2,11 @@ package wtf.jobin.db
 
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
+import wtf.jobin.cluster.nodeOnline // #85
 import java.time.Instant
 import java.util.UUID
 
@@ -160,17 +162,49 @@ suspend fun upsertCopy(db: R2dbcDatabase, titleId: UUID, spec: CopySpec): Boolea
 data class ResolvedCopy(val nodeId: UUID, val originalPath: String)
 
 /**
- * #82: pick a physical Copy for [titleId] (node + path), or null if the Title has
- * no Copy row. Currently picks any (oldest) Copy — online-aware selection that
- * prefers an *online* node is #85. Callers KEEP a media_items fallback so the
- * single-copy case (today) stays byte-identical even before backfill/ingest has
- * populated media_copies.
+ * #82/#85: pick a physical Copy for [titleId] (node + path) that lives on an *online*
+ * node, or null if the Title has no online Copy. Online = the copy's node is
+ * LOCAL_NODE_ID (the hub itself — no heartbeat, but it's up if it's serving) OR the
+ * node heartbeated within the window (see [nodeOnline] / #83). Among online copies we
+ * pick the oldest (deterministic, matches #82's createdAt ordering).
+ *
+ * #85: returning null when no copy is online is intentional — it's the signal the
+ * Title is currently unplayable (offline). Callers KEEP a media_items fallback for the
+ * single-copy case (today) so that when V13 has backfilled exactly one Copy mirroring
+ * the legacy columns AND that copy is online (LOCAL or fresh heartbeat), the resolved
+ * (nodeId, originalPath) is byte-identical to before. ponytail: single-box installs all
+ * sit on LOCAL_NODE_ID, which is always-online, so they never regress.
  */
-suspend fun resolveCopy(db: R2dbcDatabase, titleId: UUID): ResolvedCopy? =
-    suspendTransaction(db) {
-        MediaCopies.selectAll()
+suspend fun resolveCopy(db: R2dbcDatabase, titleId: UUID): ResolvedCopy? {
+    val now = Instant.now()
+    // #85: join media_copies -> nodes so we can filter by online-ness. lastSeenAt is null
+    // for never-seen / heartbeat-less nodes; LOCAL_NODE_ID is forced online regardless.
+    val rows = suspendTransaction(db) {
+        (MediaCopies leftJoin Nodes)
+            .select(MediaCopies.nodeId, MediaCopies.originalPath, MediaCopies.createdAt, Nodes.lastSeenAt)
             .where { MediaCopies.titleId eq titleId }
             .orderBy(MediaCopies.createdAt)
-            .map { ResolvedCopy(it[MediaCopies.nodeId].value, it[MediaCopies.originalPath]) }
-            .firstOrNull()
+            .map {
+                Triple(
+                    ResolvedCopy(it[MediaCopies.nodeId].value, it[MediaCopies.originalPath]),
+                    it[MediaCopies.createdAt],
+                    it[Nodes.lastSeenAt],
+                )
+            }
+            .toList()
     }
+    // #85: prefer online (LOCAL always-online OR fresh heartbeat); oldest wins (rows already
+    // ordered by createdAt). No online copy -> null (Title is offline / unplayable).
+    return rows.firstOrNull { (copy, _, lastSeen) ->
+        copy.nodeId == LOCAL_NODE_ID || nodeOnline(lastSeen, now)
+    }?.first
+}
+
+/**
+ * #85: true when [titleId] has at least one Copy on an online node (same online rule as
+ * [resolveCopy]: LOCAL_NODE_ID always-online, else heartbeat within window). Drives
+ * availability (#84): a Title with no online copy is listed but not playable. Equivalent
+ * to `resolveCopy(db, titleId) != null`; provided as a dedicated boolean for catalog/meta
+ * callers that only need availability, not the (node, path).
+ */
+suspend fun hasOnlineCopy(db: R2dbcDatabase, titleId: UUID): Boolean = resolveCopy(db, titleId) != null
