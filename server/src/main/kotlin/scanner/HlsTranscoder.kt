@@ -56,9 +56,18 @@ class HlsTranscoder(
                 .map { Triple(it[MediaItems.libraryId].value, it[MediaItems.originalPath], it[MediaItems.nodeId].value) }
                 .firstOrNull()
         } ?: error("media item $mediaId not found")
+        // #82 (ADR-0002): resolve the physical source via the Title's chosen Copy (node + path)
+        // when one exists, falling back to the legacy media_items.node_id/original_path. The V13
+        // backfill gives every existing Title exactly one Copy mirroring those legacy columns, so
+        // the single-copy case (today) resolves to the identical (nodeId, originalPath) and the
+        // produced stream is byte-identical. ponytail: resolveCopy picks any copy for now;
+        // online-aware selection that prefers an online node is #85.
+        val copy = wtf.jobin.db.resolveCopy(db, mediaId)
+        val srcNodeId = copy?.nodeId ?: nodeId
+        val srcPath = copy?.originalPath ?: originalPath
         // Phase 15 (#74): source is a local file (local node) or the owning Node's /raw URL
         // (token in query so the rest of the transcoder is untouched). ffmpeg/ffprobe read URLs natively.
-        val inputPath = resolveSource(nodeId, originalPath)
+        val inputPath = resolveSource(srcNodeId, srcPath)
 
         // #78 / ponytail: per-(media,profile) cache dir. profileKeyOf(null) == "default".
         val profileKey = profileKeyOf(profile)

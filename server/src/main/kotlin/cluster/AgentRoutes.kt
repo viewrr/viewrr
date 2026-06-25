@@ -13,7 +13,6 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.r2dbc.*
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import wtf.jobin.db.Libraries
-import wtf.jobin.db.MediaItems
 import wtf.jobin.db.Nodes
 import java.nio.file.Path
 import java.time.Instant
@@ -109,44 +108,40 @@ fun Route.agentRoutes(registry: NodeRegistry, db: R2dbcDatabase) {
         var updated = 0
         for (rec in push.records) {
             val libId = libIds.getValue(rec.root)
-            val now = Instant.now()
-            val existing = suspendTransaction(db) {
-                MediaItems.select(MediaItems.id)
-                    .where { MediaItems.originalPath eq rec.originalPath }
-                    .map { it[MediaItems.id].value }.firstOrNull()
-            }
-            if (existing != null) {
-                suspendTransaction(db) {
-                    MediaItems.update({ MediaItems.id eq existing }) {
-                        it[MediaItems.nodeId] = nodeId
-                        it[MediaItems.libraryId] = libId
-                        it[MediaItems.durationSecs] = rec.durationSecs
-                        it[MediaItems.sizeBytes] = rec.sizeBytes
-                        it[MediaItems.updatedAt] = now
-                    }
-                }
-                updated++
-            } else {
-                suspendTransaction(db) {
-                    MediaItems.insertAndGetId {
-                        it[MediaItems.nodeId] = nodeId
-                        it[MediaItems.libraryId] = libId
-                        it[MediaItems.title] = rec.title
-                        it[MediaItems.cleanTitle] = rec.cleanTitle
-                        it[MediaItems.showTitle] = rec.showTitle
-                        it[MediaItems.seasonNumber] = rec.seasonNumber
-                        it[MediaItems.episodeNumber] = rec.episodeNumber
-                        it[MediaItems.year] = rec.year?.toShort()
-                        it[MediaItems.originalPath] = rec.originalPath
-                        it[MediaItems.durationSecs] = rec.durationSecs
-                        it[MediaItems.sizeBytes] = rec.sizeBytes
-                        it[MediaItems.mimeType] = rec.mimeType
-                        it[MediaItems.createdAt] = now
-                        it[MediaItems.updatedAt] = now
-                    }
-                }
-                added++
-            }
+            // #82 (ADR-0002): find-or-create the logical Title (dedup by tmdbId, else
+            // (cleanTitle, year)), then upsert this node's physical Copy under it. A second node
+            // reporting the same movie now adds a Copy under the SAME media_items Title instead of
+            // creating a duplicate catalog row. ponytail: the agent push has no tmdbId field yet
+            // (#81 ships metadata-light records), so cross-node dedup currently keys on
+            // (cleanTitle, year); add tmdbId to AgentMediaRecord when the agent enriches.
+            val titleRes = wtf.jobin.db.findOrCreateTitle(
+                db,
+                wtf.jobin.db.TitleSpec(
+                    libraryId = libId,
+                    title = rec.title,
+                    cleanTitle = rec.cleanTitle,
+                    showTitle = rec.showTitle,
+                    seasonNumber = rec.seasonNumber,
+                    episodeNumber = rec.episodeNumber,
+                    year = rec.year,
+                    durationSecs = rec.durationSecs,
+                    nodeId = nodeId,
+                    originalPath = rec.originalPath,
+                    sizeBytes = rec.sizeBytes,
+                    mimeType = rec.mimeType,
+                ),
+            )
+            val copyCreated = wtf.jobin.db.upsertCopy(
+                db,
+                titleRes.id,
+                wtf.jobin.db.CopySpec(
+                    nodeId = nodeId,
+                    originalPath = rec.originalPath,
+                    sizeBytes = rec.sizeBytes,
+                    codecs = rec.mimeType, // ponytail: agent sends mime, not a codec string yet
+                ),
+            )
+            if (copyCreated) added++ else updated++
         }
         call.respond(IngestResult(added, updated, newLibs))
     }

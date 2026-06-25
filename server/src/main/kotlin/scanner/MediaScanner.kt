@@ -77,29 +77,43 @@ class MediaScanner(
             // movie). Fine for personal libraries; move to the async block below or a worker
             // queue if scans grow large or TMDb rate-limits bite. Shows: parse showTitle != null.
             val meta = if (parsed.showTitle == null) tmdb.lookupMovie(parsed.cleanTitle, parsed.year) else null
-            val now = Instant.now()
-            suspendTransaction(db) {
-                MediaItems.insertAndGetId {
-                    it[MediaItems.libraryId] = libraryId
-                    it[MediaItems.nodeId] = wtf.jobin.db.LOCAL_NODE_ID // Phase 14 (#72)
-                    it[MediaItems.title] = file.nameWithoutExtension
-                    it[MediaItems.cleanTitle] = parsed.cleanTitle
-                    it[MediaItems.showTitle] = parsed.showTitle
-                    it[MediaItems.seasonNumber] = parsed.seasonNumber
-                    it[MediaItems.episodeNumber] = parsed.episodeNumber
-                    it[MediaItems.year] = parsed.year?.toShort()
-                    it[MediaItems.tmdbId] = meta?.tmdbId
-                    it[MediaItems.poster] = meta?.poster
-                    it[MediaItems.backdrop] = meta?.backdrop
-                    it[MediaItems.overview] = meta?.overview
-                    it[MediaItems.originalPath] = abs
-                    it[MediaItems.durationSecs] = probe.durationSecs
-                    it[MediaItems.sizeBytes] = probe.sizeBytes
-                    it[MediaItems.mimeType] = probe.mimeType
-                    it[MediaItems.createdAt] = now
-                    it[MediaItems.updatedAt] = now
-                }
-            }
+            // #82 (ADR-0002): create-or-match the logical Title, then attach this file as a
+            // physical Copy. On a single box this is one Title + one Copy (byte-identical catalog
+            // result to the old single-insert path); a re-add of the same tmdbId/(cleanTitle,year)
+            // now reuses the Title and just upserts the Copy instead of duplicating the catalog row.
+            val titleRes = wtf.jobin.db.findOrCreateTitle(
+                db,
+                wtf.jobin.db.TitleSpec(
+                    libraryId = libraryId,
+                    title = file.nameWithoutExtension,
+                    cleanTitle = parsed.cleanTitle,
+                    showTitle = parsed.showTitle,
+                    seasonNumber = parsed.seasonNumber,
+                    episodeNumber = parsed.episodeNumber,
+                    year = parsed.year,
+                    tmdbId = meta?.tmdbId,
+                    poster = meta?.poster,
+                    backdrop = meta?.backdrop,
+                    overview = meta?.overview,
+                    durationSecs = probe.durationSecs,
+                    nodeId = wtf.jobin.db.LOCAL_NODE_ID, // Phase 14 (#72)
+                    originalPath = abs,
+                    sizeBytes = probe.sizeBytes,
+                    mimeType = probe.mimeType,
+                ),
+            )
+            wtf.jobin.db.upsertCopy(
+                db,
+                titleRes.id,
+                wtf.jobin.db.CopySpec(
+                    nodeId = wtf.jobin.db.LOCAL_NODE_ID,
+                    originalPath = abs,
+                    sizeBytes = probe.sizeBytes,
+                    codecs = probe.mimeType, // ponytail: no codec string probed yet; mime is closest signal
+                ),
+            )
+            // The (abs in existingPaths) guard above already skips known files, so reaching here
+            // means a new Copy for this library scan — count it as added regardless of Title reuse.
             added++
         }
 
