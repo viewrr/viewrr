@@ -8,6 +8,7 @@ import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.plugins.partialcontent.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.launch // #94: fire-and-forget next-episode prefetch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import org.jetbrains.exposed.v1.core.*
@@ -113,6 +114,14 @@ private suspend fun serveHlsFile(
     // Phase 15 (#80): touch the playlist on serve as the LRU access signal for cache eviction.
     if (file == "playlist.m3u8") {
         runCatching { Files.setLastModifiedTime(target, java.nio.file.attribute.FileTime.from(java.time.Instant.now())) }
+        // #94 (Phase 18): playback start = master playlist served. Warm the NEXT episode at the
+        // SAME profile in the background (depth +1, fire-and-forget). Wrapped in runCatching so it
+        // can never block or fail the current response; movies / last-episode no-op inside.
+        // ponytail: single next-item warm, no queue — multi-ahead + music prefetch are follow-ups.
+        call.application.launch {
+            runCatching { prefetchNextEpisode(db, hlsRoot, mediaId, profile, coordinator) }
+                .onFailure { wtf.jobin.streaming.prefetchLog.warn("#94 prefetch failed for {}: {}", mediaId, it.toString()) }
+        }
     }
 
     val ct = when (file.substringAfterLast('.', "").lowercase()) {
