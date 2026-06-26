@@ -51,6 +51,12 @@ data class AppConfig(
         val downloadsRoot: String,
         val tmdbApiKey: String,
         val hlsCacheMaxBytes: Long, // Phase 15 (#80) HLS cache cap
+        // #95 (Phase 18): edge-cache Hub-produced HLS to the owning same-LAN Node so later plays
+        // come over the LAN, not the Hub. DEFAULT-OFF: false reproduces today's behavior exactly
+        // (no push after transcode, localityUrl never prefers a Node HLS URL).
+        val edgeCacheEnabled: Boolean = false,
+        // #95: where an AGENT stores HLS bundles pushed to it (the receive side). Hub-mode ignores it.
+        val hlsCacheRoot: String = "/tmp/viewrr-hls-edge",
     )
 
     data class Cors(val allowedHosts: List<String>)
@@ -103,6 +109,11 @@ data class AppConfig(
                 tmdbApiKey = env.config.propertyOrNull("viewrr.media.tmdbApiKey")?.getString() ?: "",
                 hlsCacheMaxBytes = env.config.propertyOrNull("viewrr.media.hlsCacheMaxBytes")?.getString()?.toLong()
                     ?: 53_687_091_200L, // 50 GiB
+                // #95: default false -> zero behavior change vs today.
+                edgeCacheEnabled = env.config.propertyOrNull("viewrr.media.edgeCacheEnabled")
+                    ?.getString()?.toBooleanStrictOrNull() ?: false,
+                hlsCacheRoot = env.config.propertyOrNull("viewrr.media.hlsCacheRoot")?.getString()
+                    ?: "/tmp/viewrr-hls-edge",
             ),
             cors = Cors(
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")
