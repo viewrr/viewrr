@@ -30,6 +30,18 @@ object ReacquireService {
     private val lastFired = ConcurrentHashMap<UUID, Instant>()
 
     /**
+     * #86: optional acquisition enqueue hook. Phase 17's boot plugin
+     * (plugins/Acquisition.kt) sets this to AcquisitionService.enqueueTitle ONLY when
+     * acquisition.enabled=true. When null (the default, and always when acquisition is
+     * disabled) trigger() keeps its pure debounced-logging behavior — so the three
+     * callers (StremioService, HlsTranscoder, PlaybackRoutes) see no change and there
+     * is zero regression. ponytail: a single nullable hook avoids threading DI into an
+     * object singleton; it is set once at boot.
+     */
+    @Volatile
+    var enqueueHook: ((UUID) -> Unit)? = null
+
+    /**
      * #86: signal that [titleId] has no online copy and should be re-acquired. Idempotent within
      * [DEBOUNCE]: the first call (or first after the window elapses) logs/acts; repeats are dropped.
      * Returns true when this call actually fired (useful for tests / callers that want to know).
@@ -47,8 +59,16 @@ object ReacquireService {
             }
         }
         if (fired) {
-            // TODO #87+ wire to arr: enqueue a Radarr/Sonarr (or torrent) acquisition for this title.
-            log.info("#86 re-acquire requested for title {} (no online copy); acquisition is Phase 17 (#87+), logging only", titleId)
+            // #86: hand off to Phase 17 acquisition when wired (enabled builds only).
+            val hook = enqueueHook
+            if (hook != null) {
+                log.info("#86 re-acquire requested for title {} (no online copy); enqueueing acquisition (#87+)", titleId)
+                runCatching { hook(titleId) }
+                    .onFailure { log.warn("#86 acquisition enqueue hook failed for title {}", titleId, it) }
+            } else {
+                // No acquisition wired (disabled / not Phase 17): preserve the logging stub.
+                log.info("#86 re-acquire requested for title {} (no online copy); acquisition not enabled, logging only", titleId)
+            }
         } else {
             log.debug("#86 re-acquire for title {} debounced (already fired within {}s)", titleId, DEBOUNCE.seconds)
         }

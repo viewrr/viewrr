@@ -18,6 +18,7 @@ data class AppConfig(
     val scanner: Scanner,
     val cluster: Cluster,
     val agent: Agent,
+    val acquisition: Acquisition, // Phase 17 (#86..#93)
     val env: String,
     val publicBaseUrl: String,
 ) {
@@ -77,6 +78,23 @@ data class AppConfig(
         val clientAddress: String?,
         val tokenFile: String,
         val libraryRoots: List<String>, // Phase 15 (#76): dirs the raw endpoint may serve from
+    )
+
+    // Phase 17 (#86..#93): ACQUISITION. Default OFF and all-blank so a dev box with
+    // no acquisition env launches no watcher, dials no torrent RPC, and touches no
+    // dir. enabled=false => the whole feature is inert (zero regression).
+    //   blackholeDir  #90: arr apps drop grabbed .torrent/.magnet here; viewrr watches it.
+    //   downloadDir        Downloader working dir for in-flight fetches.
+    //   booksDir      #93: .epub/.pdf land here (acquire-only; never served, no Copy).
+    //   torrentRpcUrl/Token: configured torrent client RPC (null/blank => watch-dir glue).
+    // #91 Prowlarr: NOT configured here — arr drives indexers; viewrr receives via blackhole.
+    data class Acquisition(
+        val enabled: Boolean,
+        val blackholeDir: String,
+        val downloadDir: String,
+        val booksDir: String,
+        val torrentRpcUrl: String?,
+        val torrentRpcToken: String?,
     )
 
     companion object {
@@ -144,6 +162,22 @@ data class AppConfig(
                     ?.getString() ?: "/tmp/viewrr-agent.json",
                 libraryRoots = env.config.propertyOrNull("viewrr.agent.libraryRoots")?.getString()
                     ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
+            ),
+            acquisition = Acquisition(
+                // Phase 17 (#86..#93): all optional; enabled defaults false so the feature
+                // is inert unless explicitly switched on. Parses cleanly with zero env set.
+                enabled = env.config.propertyOrNull("viewrr.acquisition.enabled")
+                    ?.getString()?.toBoolean() ?: false,
+                blackholeDir = env.config.propertyOrNull("viewrr.acquisition.blackholeDir")
+                    ?.getString().orEmpty(),
+                downloadDir = env.config.propertyOrNull("viewrr.acquisition.downloadDir")
+                    ?.getString().orEmpty(),
+                booksDir = env.config.propertyOrNull("viewrr.acquisition.booksDir")
+                    ?.getString().orEmpty(),
+                torrentRpcUrl = env.config.propertyOrNull("viewrr.acquisition.torrentRpcUrl")
+                    ?.getString()?.takeIf { it.isNotBlank() },
+                torrentRpcToken = env.config.propertyOrNull("viewrr.acquisition.torrentRpcToken")
+                    ?.getString()?.takeIf { it.isNotBlank() },
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()

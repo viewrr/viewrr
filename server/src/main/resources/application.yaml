@@ -20,6 +20,7 @@ ktor:
       - wtf.jobin.RoutingKt.configureRouting
       - wtf.jobin.plugins.ApiDocsKt.configureApiDocs
       - wtf.jobin.cluster.AgentBootstrapKt.configureAgent
+      - wtf.jobin.plugins.AcquisitionKt.configureAcquisition
 
 viewrr:
   env: "$VIEWRR_ENV:dev"
@@ -69,3 +70,12 @@ viewrr:
     clientAddress: "$AGENT_CLIENT_ADDR:"
     tokenFile: "$AGENT_TOKEN_FILE:/tmp/viewrr-agent.json"
     libraryRoots: "$AGENT_LIBRARY_ROOTS:"   # Phase 15 #76 — comma-separated dirs the /raw endpoint may serve
+  acquisition:                                                            # Phase 17 #86..#93 (default OFF)
+    enabled: "$ACQUISITION_ENABLED:false"   # master switch — false => feature inert, zero regression
+    blackholeDir: "$ACQUISITION_BLACKHOLE_DIR:"   # #90 arr drops grabbed .torrent/.magnet here
+    downloadDir: "$ACQUISITION_DOWNLOAD_DIR:"     # Downloader working dir for in-flight fetches
+    booksDir: "$ACQUISITION_BOOKS_DIR:"           # #93 .epub/.pdf land here (acquire-only, not served)
+    torrentRpcUrl: "$ACQUISITION_TORRENT_RPC_URL:"     # configured torrent client RPC (blank => watch-dir glue)
+    torrentRpcToken: "$ACQUISITION_TORRENT_RPC_TOKEN:" # token for the RPC client
+    # #91 Prowlarr: arr apps drive indexers (Prowlarr aggregates them) and write grabs to the
+    # blackhole; viewrr orchestrates the blackhole only — no Prowlarr/indexer client lives here.
