@@ -50,6 +50,8 @@ viewrr:
     downloadsRoot: "$DOWNLOADS_ROOT:/tmp/viewrr-downloads"
     tmdbApiKey: "$TMDB_API_KEY:"
     hlsCacheMaxBytes: "$HLS_CACHE_MAX_BYTES:53687091200"   # Phase 15 #80 — 50 GiB default
+    edgeCacheEnabled: "$MEDIA_EDGE_CACHE_ENABLED:false"    # #95 Phase 18 — DEFAULT-OFF; true = push HLS to same-LAN node
+    hlsCacheRoot: "$HLS_CACHE_ROOT:/tmp/viewrr-hls-edge"   # #95 — AGENT-side store for pushed bundles
   cors:
     allowedHosts:
       - "localhost:5173"

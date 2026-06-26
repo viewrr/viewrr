@@ -20,6 +20,7 @@ import wtf.jobin.recs.RecsRepository
 import wtf.jobin.party.PartyHub
 import wtf.jobin.party.PartyRoomRepository
 import wtf.jobin.scanner.Ffprobe
+import wtf.jobin.scanner.HlsEdgePusher
 import wtf.jobin.scanner.HlsTranscoder
 import wtf.jobin.scanner.LibraryRepository
 import wtf.jobin.scanner.LibraryWatcher
@@ -58,7 +59,17 @@ val scannerModule = module {
     single { HlsTranscoder(get(), get<AppConfig>().media.ffmpegPath, get<AppConfig>().media.ffprobePath, get<AppConfig>().media.hlsRoot, get<AppConfig>().cluster.enrollmentSecret) }
     single { TmdbClient(get<AppConfig>().media.tmdbApiKey) }
     single { HlsCacheManager(java.nio.file.Path.of(get<AppConfig>().media.hlsRoot), get(), get<AppConfig>().media.hlsCacheMaxBytes) } // #80
-    single { TranscodeCoordinator(get(), get()) } // Phase 15 (#75/#80) lazy transcode + cache cap
+    single {
+        // #95 (Phase 18): build the edge pusher only when edgeCacheEnabled; pass null otherwise so
+        // the coordinator's edge path stays inert (DEFAULT-OFF = byte-identical to today).
+        val cfg = get<AppConfig>()
+        val edgePusher = if (cfg.media.edgeCacheEnabled) {
+            HlsEdgePusher(get(), java.nio.file.Path.of(cfg.media.hlsRoot), cfg.cluster.enrollmentSecret)
+        } else {
+            null
+        }
+        TranscodeCoordinator(get(), get(), edgePusher)
+    } // Phase 15 (#75/#80) lazy transcode + cache cap; #95 edge push
     single { MediaScanner(get(), get(), get()) }
     single { LibraryRepository(get()) }
     // Eager so the watcher is ready before #35 wires start() at boot.

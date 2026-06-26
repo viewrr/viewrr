@@ -51,6 +51,7 @@ fun Route.playbackRoutes(
     stremioKeys: StremioKeys,
     publicBaseUrl: String,
     enrollmentSecret: String, // #79: reused as the Node /raw token (same v0 LAN auth as HlsTranscoder)
+    edgeCacheEnabled: Boolean = false, // #95: DEFAULT-OFF; when true prefer a node-cached HLS URL
 ) {
     authenticate("auth-jwt") {
         get("/playback/{id}") {
@@ -97,7 +98,16 @@ fun Route.playbackRoutes(
             // back the Node's /raw URL — same shape HlsTranscoder.resolveSource builds — so the bytes
             // never round-trip through the Hub. Any miss leaves the Hub HLS url untouched (the default).
             val clientEgressIp = call.request.origin.remoteHost
-            val localUrl = localityUrl(db, nodeId, originalPath, clientEgressIp, enrollmentSecret)
+            // #95 (Phase 18): edge-cache preference. ONLY when enabled (default false) AND the owning
+            // same-LAN node actually holds the pushed HLS bundle (recorded in media_copies.hls_path by
+            // HlsEdgePusher). Falls through to the #79 direct-/raw path and finally the Hub HLS, so a
+            // miss is never a regression. When edgeCacheEnabled is false this is skipped entirely.
+            val edgeUrl = if (edgeCacheEnabled) {
+                edgeCacheUrl(db, id, nodeId, clientEgressIp)
+            } else {
+                null
+            }
+            val localUrl = edgeUrl ?: localityUrl(db, nodeId, originalPath, clientEgressIp, enrollmentSecret)
 
             call.respond(
                 if (localUrl != null) {
@@ -163,4 +173,50 @@ private suspend fun localityUrl(
     val tok = URLEncoder.encode(enrollmentSecret, "UTF-8")
     val p = URLEncoder.encode(originalPath, "UTF-8")
     return "http://$clientAddress/raw?token=$tok&path=$p"
+}
+
+/**
+ * #95 (Phase 18) — return the owning Node's cached-HLS URL when edge-cache applies, else null.
+ *
+ * Preconditions mirror [localityUrl]'s same-LAN gate (remote node, egress-IP match, online,
+ * client-plane address present) PLUS the node must actually hold the bundle: the chosen Copy's
+ * `media_copies.hls_path` must be the node HLS URL [HlsEdgePusher] recorded on a successful push.
+ * That stored value already embeds the node base + token, so it's returned verbatim.
+ *
+ * Caller invokes this ONLY when media.edgeCacheEnabled is true, so with edge-cache off the entire
+ * code path is dead and playback resolution is byte-identical to today.
+ *
+ * ponytail: keyed on [titleId] + [nodeId] (the MediaItems.node_id used by #79). For the single-copy
+ * / V13-backfilled case that copy's node == MediaItems.node_id, so the lookup matches. Multi-copy
+ * selection (resolveCopy) is the follow-up once the node binary is deployed.
+ * TODO needs node deployed: hls_path is only ever populated by a real push to a running Node, so
+ * until then this returns null and the Hub HLS path serves — exactly as before this issue.
+ */
+private suspend fun edgeCacheUrl(
+    db: R2dbcDatabase,
+    titleId: UUID,
+    nodeId: UUID,
+    clientEgressIp: String,
+): String? {
+    if (nodeId == LOCAL_NODE_ID) return null // local node serves Hub HLS directly
+    val node = suspendTransaction(db) {
+        Nodes.select(Nodes.egressIp, Nodes.clientAddress, Nodes.lastSeenAt)
+            .where { Nodes.id eq nodeId }
+            .map { Triple(it[Nodes.egressIp], it[Nodes.clientAddress], it[Nodes.lastSeenAt]) }
+            .firstOrNull()
+    } ?: return null
+    val (egressIp, clientAddress, lastSeenAt) = node
+    if (egressIp.isNullOrBlank() || egressIp != clientEgressIp) return null // not same-LAN
+    if (clientAddress.isNullOrBlank()) return null
+    if (!wtf.jobin.cluster.nodeOnline(lastSeenAt)) return null
+    // The pushed-bundle marker: media_copies.hls_path for this Title's copy on this node. Non-null
+    // (and a node URL) only after HlsEdgePusher confirmed a full push. Returned as-is (token baked in).
+    val hls = suspendTransaction(db) {
+        wtf.jobin.db.MediaCopies
+            .select(wtf.jobin.db.MediaCopies.hlsPath)
+            .where { (wtf.jobin.db.MediaCopies.titleId eq titleId) and (wtf.jobin.db.MediaCopies.nodeId eq nodeId) }
+            .map { it[wtf.jobin.db.MediaCopies.hlsPath] }
+            .firstOrNull()
+    }
+    return hls?.takeIf { it.isNotBlank() }
 }

@@ -52,6 +52,7 @@ import wtf.jobin.stremio.stremioRoutes
 import wtf.jobin.cluster.NodeRegistry
 import wtf.jobin.cluster.agentRoutes
 import wtf.jobin.cluster.agentRawRoutes
+import wtf.jobin.cluster.agentHlsRoutes // #95
 
 fun Application.configureRouting() {
     val appConfig by inject<AppConfig>()
@@ -62,6 +63,11 @@ fun Application.configureRouting() {
         routing {
             get("/health") { call.respondText("ok") }
             agentRawRoutes(appConfig.cluster.enrollmentSecret, appConfig.agent.libraryRoots) // #76
+            // #95 (Phase 18): edge-cache receiver. Mounted ONLY when edge-cache is enabled, so the
+            // default-off agent surface is unchanged (just /health + /raw). TODO needs node deployed.
+            if (appConfig.media.edgeCacheEnabled) {
+                agentHlsRoutes(appConfig.cluster.enrollmentSecret, appConfig.media.hlsCacheRoot)
+            }
         }
         return
     }
@@ -95,7 +101,7 @@ fun Application.configureRouting() {
         mediaRoutes(transcoder)
         mediaSearchRoutes(mediaSearch)
         mediaListRoutes(db)
-        playbackRoutes(db, stremioKeys, appConfig.publicBaseUrl, appConfig.cluster.enrollmentSecret) // #79
+        playbackRoutes(db, stremioKeys, appConfig.publicBaseUrl, appConfig.cluster.enrollmentSecret, appConfig.media.edgeCacheEnabled) // #79 / #95
         homeRoutes(db)
         recsRoutes(recs)
         adminRecsRoutes(recEngine)
