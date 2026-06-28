@@ -36,13 +36,27 @@ jobs:
             -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }} \
             --no-daemon
 
+      # Build the changelog inline (commits since the previous tag) so the release body
+      # carries the full list itself — no separate "Full Changelog" compare link.
+      - name: Build changelog
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          {
+            echo "## What's changed"
+            echo
+            git log --no-merges --pretty='- %s (%h)' ${PREV:+"$PREV"..}"${GITHUB_REF_NAME}"
+            echo
+            if [ -n "$PREV" ]; then echo "_Since ${PREV}._"; else echo "_Initial release._"; fi
+            echo
+            echo "**Container image:** \`ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME#v}\`"
+          } > CHANGELOG_RELEASE.md
+          echo "--- release body ---"; cat CHANGELOG_RELEASE.md
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          append_body: true
-          body: |
-            Container image: `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+          generate_release_notes: false
+          body_path: CHANGELOG_RELEASE.md
 
       # Trigger a redeploy of the viewrr app on Dokploy — it pulls the image Jib just
       # pushed to GHCR (point the Dokploy app at ghcr.io/${{ github.repository }}:latest).
