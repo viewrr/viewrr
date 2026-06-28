@@ -295,6 +295,8 @@ class HlsTranscoder(
         return heights.map { h ->
             val w = ((srcW * h) / srcH / 2) * 2
             val br = when {
+                h >= 2160 -> 14000
+                h >= 1440 -> 8000 // #116: distinct from 1080 so master BANDWIDTH values don't collide
                 h >= 1080 -> 5000
                 h >= 720 -> 2800
                 h >= 480 -> 1400
@@ -314,6 +316,8 @@ class HlsTranscoder(
     private fun buildProfileRenditions(dims: Pair<Int, Int>?, profile: CapabilityProfile): List<Rendition> {
         val cap = profile.maxHeight
         fun defaultBr(h: Int) = when {
+            h >= 2160 -> 14000
+            h >= 1440 -> 8000
             h >= 1080 -> 5000
             h >= 720 -> 2800
             h >= 480 -> 1400
@@ -444,9 +448,34 @@ class HlsTranscoder(
         for (r in renditions) {
             sb.append("#EXT-X-STREAM-INF:BANDWIDTH=${r.br * 1000 + 128000}")
             if (r.w != null && r.h != null) sb.append(",RESOLUTION=${r.w}x${r.h}")
+            sb.append(",CODECS=\"${hlsCodecsAttr(r.h, audioTracks.isNotEmpty())}\"")
             if (multiAudio) sb.append(",AUDIO=\"aud\"")
             sb.append('\n').append("${r.name}.m3u8").append('\n')
         }
         return sb.toString()
     }
+
+}
+
+/**
+ * #116: hls.js never creates SourceBuffers (and silently stalls before FRAG_LOADING) unless each
+ * #EXT-X-STREAM-INF carries CODECS. We always encode H.264 High 8-bit (libx264 default, yuv420p)
+ * + AAC-LC, so the string is avc1.6400<level> — High profile (0x6400) plus an H.264 level hex
+ * derived from rendition height — plus mp4a.40.2 when the variant has audio. The level is a
+ * conservative ceiling (decoders accept a codec string whose level >= the actual stream); height
+ * is null only on the probe-failure rung, where we assume 1080. de-dup of the 1440/1080 BANDWIDTH
+ * is handled in the bitrate ladders. Top-level + internal so it's unit-testable without a transcoder.
+ */
+internal fun hlsCodecsAttr(h: Int?, hasAudio: Boolean): String {
+    val height = h ?: 1080
+    val levelHex = when {
+        height >= 2160 -> "33" // 5.1
+        height >= 1440 -> "32" // 5.0
+        height >= 1080 -> "28" // 4.0
+        height >= 720 -> "1f" // 3.1
+        height >= 480 -> "1e" // 3.0
+        else -> "15" // 2.1
+    }
+    val video = "avc1.6400$levelHex"
+    return if (hasAudio) "$video,mp4a.40.2" else video
 }
