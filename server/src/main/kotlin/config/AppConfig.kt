@@ -43,6 +43,10 @@ data class AppConfig(
         // When null/blank, the legacy HS256 path stays live. See docs/runbooks/keycloak.md.
         val oidcIssuer: String? = null,
         val oidcJwksUrl: String? = null,
+        // #118: approved frontend client_ids. In OIDC mode, a token is accepted only if its `azp`
+        // (authorized party = the client it was minted for) is in this set. Empty = no restriction
+        // (back-compat). Set AUTH_ALLOWED_CLIENTS=viewrr-web,viewrr-mobile to lock the API to our apps.
+        val allowedClients: List<String> = emptyList(),
     )
 
     data class Media(
@@ -118,6 +122,8 @@ data class AppConfig(
                 refreshTtlDays = env.config.property("viewrr.auth.refreshTtlDays").getString().toLong(),
                 oidcIssuer = env.config.propertyOrNull("viewrr.auth.oidcIssuer")?.getString()?.takeIf { it.isNotBlank() },
                 oidcJwksUrl = env.config.propertyOrNull("viewrr.auth.oidcJwksUrl")?.getString()?.takeIf { it.isNotBlank() },
+                allowedClients = env.config.propertyOrNull("viewrr.auth.allowedClients")?.getString()
+                    ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
             ),
             media = Media(
                 ffprobePath = env.config.property("viewrr.media.ffprobePath").getString(),
