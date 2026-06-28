@@ -44,8 +44,10 @@ fun Application.configureSecurity() {
     // Legacy /auth/login + argon2 removal is the post-cutover step (#115); not touched here.
     // ponytail: RS256 activates only with OIDC config present; verifiable only vs a live Keycloak.
     val oidcEnabled = !cfg.auth.oidcIssuer.isNullOrBlank() && !cfg.auth.oidcJwksUrl.isNullOrBlank()
+    val allowedClients = cfg.auth.allowedClients // #118: approved frontend client_ids (azp allowlist)
     if (oidcEnabled) {
         log.info("viewrr.auth.oidc* set — validating Keycloak RS256 tokens via JWKS (issuer=${cfg.auth.oidcIssuer}).")
+        if (allowedClients.isNotEmpty()) log.info("viewrr.auth.allowedClients set — azp allowlist active: $allowedClients")
     }
 
     authentication {
@@ -75,7 +77,16 @@ fun Application.configureSecurity() {
                 )
             }
             validate { credential ->
-                if (credential.payload.subject != null) JWTPrincipal(credential.payload) else null
+                if (credential.payload.subject == null) return@validate null
+                // #118: in OIDC mode, only accept tokens minted for an approved frontend (azp allowlist).
+                // Even a valid user token issued to some other client_id is refused. Empty list = allow any
+                // (back-compat). Honest ceiling: a determined party can still build a client using our
+                // public client_id — this gates registered clients, not binary authenticity (see CONNECT docs).
+                if (oidcEnabled && allowedClients.isNotEmpty()) {
+                    val azp = credential.payload.getClaim("azp").asString()
+                    if (azp == null || azp !in allowedClients) return@validate null
+                }
+                JWTPrincipal(credential.payload)
             }
         }
         session<UserSession>("auth-session") {
