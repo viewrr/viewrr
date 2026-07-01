@@ -70,6 +70,9 @@ object MediaItems : UUIDTable("media_items") {
     val poster = text("poster").nullable()
     val backdrop = text("backdrop").nullable()
     val overview = text("overview").nullable()
+    // #128 (P2P moderation): operator de-index flag. true => hidden from public
+    // discovery (browse/search/home/Stremio) but NOT deleted. See V14 + publicCatalogOp().
+    val deindexed = bool("deindexed").default(false)
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 }

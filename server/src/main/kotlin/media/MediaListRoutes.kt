@@ -68,7 +68,9 @@ fun Route.mediaListRoutes(db: R2dbcDatabase) {
             }
             val order = if (call.request.queryParameters["order"] == "desc") SortOrder.DESC else SortOrder.ASC
             val items = suspendTransaction(db) {
-                MediaItems.selectAll().orderBy(col to order).map { it.toMediaItem() }.toList()
+                // #128: public browse — exclude de-indexed + non-TMDB Titles in-DB (publicCatalogOp).
+                MediaItems.selectAll().where { publicCatalogOp() }
+                    .orderBy(col to order).map { it.toMediaItem() }.toList()
             }
             // ponytail: rating filter + cap in Kotlin; libraries are small.
             call.respond(items.filter { isVisible(max, it.contentRating) }.take(limit))

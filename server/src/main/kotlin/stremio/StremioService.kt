@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 import wtf.jobin.db.MediaItems
 import wtf.jobin.db.hasOnlineCopy // #84
 import wtf.jobin.media.ReacquireService // #84/#86
+import wtf.jobin.media.publicCatalogOp // #128
 import wtf.jobin.rating.isVisible
 import wtf.jobin.rating.maxRatingFor
 import java.util.Base64
@@ -59,7 +60,8 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
     suspend fun movieCatalog(userId: UUID, search: String?): List<StMetaPreview> {
         val max = maxRatingFor(db, userId)
         val rows = suspendTransaction(db) {
-            MediaItems.selectAll().where { MediaItems.showTitle.isNull() }.map { it.toRow() }.toList()
+            // #128: public Stremio catalog — exclude de-indexed + non-TMDB Titles (publicCatalogOp).
+            MediaItems.selectAll().where { MediaItems.showTitle.isNull() and publicCatalogOp() }.map { it.toRow() }.toList()
         }
         return rows
             .filter { isVisible(max, it.rating) }
@@ -78,7 +80,8 @@ class StremioService(private val db: R2dbcDatabase, private val publicBaseUrl: S
     suspend fun seriesCatalog(userId: UUID, search: String?): List<StMetaPreview> {
         val max = maxRatingFor(db, userId)
         val rows = suspendTransaction(db) {
-            MediaItems.selectAll().where { MediaItems.showTitle.isNotNull() }.map { it.toRow() }.toList()
+            // #128: public Stremio catalog — exclude de-indexed + non-TMDB episodes (publicCatalogOp).
+            MediaItems.selectAll().where { MediaItems.showTitle.isNotNull() and publicCatalogOp() }.map { it.toRow() }.toList()
         }
         return rows
             .filter { isVisible(max, it.rating) }
