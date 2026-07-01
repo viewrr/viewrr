@@ -33,6 +33,9 @@ data class MediaListItem(
     val poster: String? = null,
     val backdrop: String? = null,
     val overview: String? = null,
+    // TMDB star rating (V16 editorial). Clients render stars on the thumbnail. Null until enriched.
+    val tmdbVoteAverage: Float? = null, // 0.0..10.0
+    val tmdbVoteCount: Int? = null,
 )
 
 internal fun ResultRow.toMediaItem() = MediaListItem(
@@ -49,6 +52,8 @@ internal fun ResultRow.toMediaItem() = MediaListItem(
     poster = this[MediaItems.poster],
     backdrop = this[MediaItems.backdrop],
     overview = this[MediaItems.overview],
+    tmdbVoteAverage = this[MediaItems.tmdbVoteAverage],
+    tmdbVoteCount = this[MediaItems.tmdbVoteCount],
 )
 
 /**
@@ -68,7 +73,10 @@ fun Route.mediaListRoutes(db: R2dbcDatabase) {
             }
             val order = if (call.request.queryParameters["order"] == "desc") SortOrder.DESC else SortOrder.ASC
             val items = suspendTransaction(db) {
-                MediaItems.selectAll().orderBy(col to order).map { it.toMediaItem() }.toList()
+                // #128: owner browse — exclude only de-indexed Titles (notDeindexedOp).
+                // No TMDB gate here: owners must still see their own non-matched media.
+                MediaItems.selectAll().where { notDeindexedOp() }
+                    .orderBy(col to order).map { it.toMediaItem() }.toList()
             }
             // ponytail: rating filter + cap in Kotlin; libraries are small.
             call.respond(items.filter { isVisible(max, it.contentRating) }.take(limit))
