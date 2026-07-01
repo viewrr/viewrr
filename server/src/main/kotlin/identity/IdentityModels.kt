@@ -4,9 +4,16 @@ import kotlinx.serialization.Serializable
 
 // #120 wire DTOs. Keys and signatures are lowercase hex (see Ed25519Verifier).
 
-/** POST /identity/register — signature is Ed25519(REGISTER_MESSAGE) by the account's secret key. */
+/**
+ * POST /identity/register — signature is Ed25519(REGISTER_MESSAGE) by the account's secret key.
+ * [displayName] is an optional cosmetic petname (see V17); the pubkey remains the real identity.
+ */
 @Serializable
-data class RegisterIdentityRequest(val publicKey: String, val signature: String)
+data class RegisterIdentityRequest(
+    val publicKey: String,
+    val signature: String,
+    val displayName: String? = null,
+)
 
 /** GET /identity/challenge response. */
 @Serializable
@@ -23,4 +30,4 @@ data class VerifyIdentityRequest(val publicKey: String, val challenge: String, v
 
 /** Returned by register — the created/existing account, without any secret material. */
 @Serializable
-data class AccountView(val accountId: String, val publicKey: String)
+data class AccountView(val accountId: String, val publicKey: String, val displayName: String? = null)

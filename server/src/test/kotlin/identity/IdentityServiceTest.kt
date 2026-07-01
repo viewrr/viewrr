@@ -17,9 +17,9 @@ class FakeIdentityAccountRepository : IdentityAccountRepository(dormantDb) {
 
     override suspend fun findByPublicKey(publicKeyHex: String): IdentityAccountRow? = byKey[publicKeyHex]
 
-    override suspend fun create(publicKeyHex: String): IdentityAccountRow {
+    override suspend fun create(publicKeyHex: String, displayName: String?): IdentityAccountRow {
         createCount++
-        val row = IdentityAccountRow(UUID.randomUUID(), publicKeyHex)
+        val row = IdentityAccountRow(UUID.randomUUID(), publicKeyHex, displayName)
         byKey[publicKeyHex] = row
         return row
     }
@@ -60,6 +60,22 @@ class IdentityServiceTest {
         assertTrue(created)
         assertEquals(1, accounts.createCount)
         assertEquals(id.publicKeyHex, view.publicKey)
+    }
+
+    @Test
+    fun registerStoresDisplayNameAndIsSetOnce() = runIdentityTest {
+        val accounts = FakeIdentityAccountRepository()
+        val svc = service(accounts)
+        val id = Ed25519TestIdentity()
+        val sig = id.sign(IdentityService.REGISTER_MESSAGE)
+
+        val (first, _) = svc.register(RegisterIdentityRequest(id.publicKeyHex, sig, "jobin"))
+        assertEquals("jobin", first.displayName) // petname round-trips
+
+        // Re-register with a different name must NOT overwrite (set-once semantics).
+        val (second, created) = svc.register(RegisterIdentityRequest(id.publicKeyHex, sig, "someone-else"))
+        assertFalse(created)
+        assertEquals("jobin", second.displayName)
     }
 
     @Test
