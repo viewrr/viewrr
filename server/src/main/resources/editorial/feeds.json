@@ -1,0 +1,85 @@
+{
+  "_comment": "Editorial ingest feed registry. Adding an outlet = adding an object here, NOT code. format: json (JSON Feed v1.1) | xml (RSS/Atom). type: reviews | awards | festival (a hint; the per-item classifier is authoritative — an award headline on a reviews feed still becomes a highlight). enabled=false rows are parsed by nobody; kept as documentation of what was tried. Verified 2026-07-02 via reachability/shape check.",
+  "feeds": [
+    {
+      "name": "The Hollywood Reporter",
+      "url": "https://rss.app/feeds/v1.1/XuBRUTnUaoC0nSUx.json",
+      "format": "json",
+      "type": "reviews",
+      "enabled": true,
+      "note": "KNOWN GOOD (JSON Feed v1.1)."
+    },
+    {
+      "name": "RogerEbert.com",
+      "url": "https://www.rogerebert.com/feed",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": true,
+      "note": "Verified RSS with items."
+    },
+    {
+      "name": "Film Companion",
+      "url": "https://www.filmcompanion.in/feed",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": true,
+      "note": "Verified RSS (Indian cinema criticism)."
+    },
+    {
+      "name": "Rediff Movies",
+      "url": "https://www.rediff.com/rss/moviesrss.xml",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": true,
+      "note": "Verified RSS."
+    },
+    {
+      "name": "NYT Movies",
+      "url": "https://rss.nytimes.com/services/xml/rss/nyt/Movies.xml",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": false,
+      "note": "UNVERIFIED — host refused our reachability fetch (bot filtering). Historically a stable RSS feed; re-verify from a real client before enabling."
+    },
+    {
+      "name": "Times of India Movie Reviews",
+      "url": "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": false,
+      "note": "UNVERIFIED — host refused our reachability fetch. Confirm this is the movie-reviews feed id before enabling."
+    },
+    {
+      "name": "Variety Film",
+      "url": "https://variety.com/v/film/feed/",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": false,
+      "note": "DEAD for us — 307-redirects to tollbit.variety.com (Tollbit bot-wall). Not machine-fetchable without a paid Tollbit key."
+    },
+    {
+      "name": "IndieWire",
+      "url": "https://www.indiewire.com/feed/",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": false,
+      "note": "DEAD for us — 307-redirects to tollbit.indiewire.com (Tollbit bot-wall)."
+    },
+    {
+      "name": "Washington Post Movies",
+      "url": "https://feeds.washingtonpost.com/rss/entertainment/movies/",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": false,
+      "note": "DEAD — HTTP 403 Forbidden."
+    },
+    {
+      "name": "Lensman",
+      "url": "UNKNOWN",
+      "format": "xml",
+      "type": "reviews",
+      "enabled": false,
+      "note": "FLAGGED — outlet named in the brief but no feed URL known. Not guessed. Supply a URL to enable."
+    }
+  ]
+}

@@ -114,3 +114,8 @@ val musicModule = module {
     single { MusicScanner(get(), get()) }
     single { MusicRepository(get()) }
 }
+
+val editorialModule = module {
+    single { wtf.jobin.editorial.EditorialRepository(get()) }
+    single { wtf.jobin.editorial.EditorialIngestService(get()) }
+}

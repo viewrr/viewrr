@@ -33,6 +33,9 @@ data class MediaListItem(
     val poster: String? = null,
     val backdrop: String? = null,
     val overview: String? = null,
+    // TMDB star rating (V16 editorial). Clients render stars on the thumbnail. Null until enriched.
+    val tmdbVoteAverage: Float? = null, // 0.0..10.0
+    val tmdbVoteCount: Int? = null,
 )
 
 internal fun ResultRow.toMediaItem() = MediaListItem(
@@ -49,6 +52,8 @@ internal fun ResultRow.toMediaItem() = MediaListItem(
     poster = this[MediaItems.poster],
     backdrop = this[MediaItems.backdrop],
     overview = this[MediaItems.overview],
+    tmdbVoteAverage = this[MediaItems.tmdbVoteAverage],
+    tmdbVoteCount = this[MediaItems.tmdbVoteCount],
 )
 
 /**

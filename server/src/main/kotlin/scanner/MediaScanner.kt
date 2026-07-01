@@ -95,6 +95,8 @@ class MediaScanner(
                     poster = meta?.poster,
                     backdrop = meta?.backdrop,
                     overview = meta?.overview,
+                    tmdbVoteAverage = meta?.voteAverage,
+                    tmdbVoteCount = meta?.voteCount,
                     durationSecs = probe.durationSecs,
                     nodeId = wtf.jobin.db.LOCAL_NODE_ID, // Phase 14 (#72)
                     originalPath = abs,

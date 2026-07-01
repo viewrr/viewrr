@@ -21,6 +21,9 @@ data class TmdbMeta(
     val poster: String?,
     val backdrop: String?,
     val overview: String?,
+    // Editorial (V14): TMDB star rating. voteAverage is 0.0..10.0; both null when TMDb omits them.
+    val voteAverage: Double? = null,
+    val voteCount: Int? = null,
 )
 
 @Serializable
@@ -32,6 +35,8 @@ private data class TmdbResult(
     @SerialName("poster_path") val posterPath: String? = null,
     @SerialName("backdrop_path") val backdropPath: String? = null,
     val overview: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+    @SerialName("vote_count") val voteCount: Int? = null,
 )
 
 /**
@@ -76,6 +81,8 @@ class TmdbClient(
             poster = r.posterPath?.let { "$imageBase/w500$it" },
             backdrop = r.backdropPath?.let { "$imageBase/w1280$it" },
             overview = r.overview?.ifBlank { null },
+            voteAverage = r.voteAverage,
+            voteCount = r.voteCount,
         )
     }
 }

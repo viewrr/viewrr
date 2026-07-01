@@ -60,6 +60,8 @@ fun Route.mediaAdminRoutes(db: R2dbcDatabase, tmdb: TmdbClient) {
                         it[MediaItems.poster] = meta.poster
                         it[MediaItems.backdrop] = meta.backdrop
                         it[MediaItems.overview] = meta.overview
+                        it[MediaItems.tmdbVoteAverage] = meta.voteAverage?.toFloat() // V16 (editorial)
+                        it[MediaItems.tmdbVoteCount] = meta.voteCount
                     }
                 }
                 enriched++
