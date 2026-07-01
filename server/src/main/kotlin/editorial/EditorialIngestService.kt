@@ -1,5 +1,10 @@
 package wtf.jobin.editorial
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 
@@ -69,5 +74,26 @@ class EditorialIngestService(
         val summary = RefreshSummary(feeds.size, itemsSeen, reviewsAdded, highlightsAdded, unmatched)
         log.info("editorial refresh done: {}", summary)
         return summary
+    }
+
+    /**
+     * Boot refresh + a fallback loop every [intervalMinutes] (<=0 disables the loop).
+     * Mirrors ScannerScheduler: fire-and-forget so startup never blocks, runCatching so one failed
+     * pass never kills the loop. ponytail: reuses the app's launch-loop idiom, no cron dependency.
+     */
+    fun startRefreshLoop(scope: CoroutineScope, intervalMinutes: Long) {
+        scope.launch(Dispatchers.IO) {
+            runCatching { refresh() }.onFailure { log.warn("editorial boot refresh failed", it) }
+        }
+        if (intervalMinutes <= 0) {
+            log.info("editorial fallback refresh disabled (intervalMinutes={})", intervalMinutes)
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(intervalMinutes * 60_000)
+                runCatching { refresh() }.onFailure { log.warn("editorial refresh cycle failed", it) }
+            }
+        }
     }
 }
