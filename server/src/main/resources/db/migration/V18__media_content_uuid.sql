@@ -1,0 +1,12 @@
+-- #124 (P2P-ADR 0008), slice 1: deterministic content address on the Title.
+--
+-- content_uuid = UUIDv5(frozen namespace, "tmdb:{kind}:{id}") — see ContentUuid.kt. It is the
+-- key the future P2P availability swarm hashes (hash(content_uuid)); the catalog stays
+-- metadata-only with NO publicKey<->title link. Nullable: titles without a tmdbId (untitled
+-- probe-only rows) have no stable content address.
+--
+-- ponytail: additive only. Does NOT touch media_copies / Title-Copy availability (#82-#85),
+-- which still drive playback today. New/re-scanned titles populate this going forward; a SQL
+-- backfill is skipped (UUIDv5 in plpgsql is not worth it — a rescan fills it). No index yet:
+-- add one when DHT lookups actually query by content_uuid (slice 2).
+ALTER TABLE media_items ADD COLUMN content_uuid UUID;

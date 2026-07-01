@@ -41,7 +41,17 @@ data class TitleSpec(
     val originalPath: String,
     val sizeBytes: Long? = null,
     val mimeType: String? = null,
-)
+) {
+    /**
+     * #124: this title's deterministic P2P content address, or null without a tmdbId.
+     * TV when any episode/series field is set (season/episode disambiguate the address).
+     */
+    fun contentUuid(): UUID? = tmdbId?.let { id ->
+        val tv = showTitle != null || seasonNumber != null || episodeNumber != null
+        if (tv) ContentUuid.forTmdb(id, ContentUuid.Kind.TV, seasonNumber, episodeNumber)
+        else ContentUuid.forTmdb(id, ContentUuid.Kind.MOVIE)
+    }
+}
 
 /** #82: the physical Copy fields for a single file on a node. */
 data class CopySpec(
@@ -103,6 +113,7 @@ suspend fun findOrCreateTitle(db: R2dbcDatabase, spec: TitleSpec): TitleResult {
             it[MediaItems.episodeNumber] = spec.episodeNumber
             it[MediaItems.year] = spec.year?.toShort()
             it[MediaItems.tmdbId] = spec.tmdbId
+            it[MediaItems.contentUuid] = spec.contentUuid() // #124: null when no tmdbId
             it[MediaItems.poster] = spec.poster
             it[MediaItems.backdrop] = spec.backdrop
             it[MediaItems.overview] = spec.overview
