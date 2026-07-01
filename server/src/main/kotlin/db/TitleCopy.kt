@@ -32,6 +32,8 @@ data class TitleSpec(
     val poster: String? = null,
     val backdrop: String? = null,
     val overview: String? = null,
+    val tmdbVoteAverage: Double? = null, // V16 (editorial): TMDB star rating
+    val tmdbVoteCount: Int? = null,
     val durationSecs: Int? = null,
     // Legacy physical columns kept on media_items for single-copy compat (V13 / #85).
     // The first Copy seeds them so today's transcode/playback fallback is unchanged.
@@ -104,6 +106,8 @@ suspend fun findOrCreateTitle(db: R2dbcDatabase, spec: TitleSpec): TitleResult {
             it[MediaItems.poster] = spec.poster
             it[MediaItems.backdrop] = spec.backdrop
             it[MediaItems.overview] = spec.overview
+            it[MediaItems.tmdbVoteAverage] = spec.tmdbVoteAverage?.toFloat()
+            it[MediaItems.tmdbVoteCount] = spec.tmdbVoteCount
             it[MediaItems.originalPath] = spec.originalPath
             it[MediaItems.durationSecs] = spec.durationSecs
             it[MediaItems.sizeBytes] = spec.sizeBytes

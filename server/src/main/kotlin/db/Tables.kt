@@ -73,8 +73,38 @@ object MediaItems : UUIDTable("media_items") {
     // #128 (P2P moderation): operator de-index flag. true => hidden from public
     // discovery (browse/search/home/Stremio) but NOT deleted. See V14 + publicCatalogOp().
     val deindexed = bool("deindexed").default(false)
+    // V16 (editorial): TMDB star rating exposed on the media read endpoint. Null until scan/backfill.
+    val tmdbVoteAverage = float("tmdb_vote_average").nullable()
+    val tmdbVoteCount = integer("tmdb_vote_count").nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
+}
+
+// V16 (editorial): critic review links fuzzy-matched to a Title. parsedRating usually null
+// (link-only is the honest floor); matchScore is the fuzzy-match confidence that tied it here.
+object MovieReviews : UUIDTable("movie_reviews") {
+    val mediaItemId = reference("media_item_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
+    val outlet = text("outlet")
+    val url = text("url")
+    val publishedAt = timestamp("published_at").nullable()
+    val snippet = text("snippet").nullable()
+    val parsedRating = float("parsed_rating").nullable()
+    val matchScore = float("match_score").nullable()
+    val createdAt = timestamp("created_at")
+
+    init { uniqueIndex(mediaItemId, url) } // idempotent re-ingest
+}
+
+// V16 (editorial): award/festival badges rendered on the thumbnail. type = classifier slug.
+object MovieHighlights : UUIDTable("movie_highlights") {
+    val mediaItemId = reference("media_item_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
+    val type = text("type")
+    val label = text("label")
+    val sourceUrl = text("source_url").nullable()
+    val date = timestamp("date").nullable()
+    val createdAt = timestamp("created_at")
+
+    init { uniqueIndex(mediaItemId, type, label) } // idempotent re-ingest
 }
 
 // #82 (ADR-0002): physical Copy layer. media_items stays the logical Title; a

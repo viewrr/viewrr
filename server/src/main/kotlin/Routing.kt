@@ -46,6 +46,9 @@ import wtf.jobin.downloads.DownloadService
 import wtf.jobin.downloads.downloadRoutes
 import wtf.jobin.collection.CollectionRepository
 import wtf.jobin.collection.collectionRoutes
+import wtf.jobin.editorial.EditorialRepository
+import wtf.jobin.editorial.EditorialIngestService
+import wtf.jobin.editorial.editorialRoutes
 import wtf.jobin.series.seriesRoutes
 import wtf.jobin.stremio.StremioKeys
 import wtf.jobin.stremio.stremioRoutes
@@ -92,6 +95,8 @@ fun Application.configureRouting() {
     val collections by inject<CollectionRepository>()
     val stremioKeys by inject<StremioKeys>()
     val nodeRegistry by inject<NodeRegistry>()
+    val editorialRepo by inject<EditorialRepository>()
+    val editorialIngest by inject<EditorialIngestService>()
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
@@ -117,6 +122,7 @@ fun Application.configureRouting() {
         seriesRoutes(db)
         musicRoutes(db)
         mediaAdminRoutes(db, tmdb)
+        editorialRoutes(editorialRepo, editorialIngest)
         agentRoutes(nodeRegistry, db)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
     }
