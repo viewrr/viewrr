@@ -46,7 +46,8 @@ fun Route.homeRoutes(db: R2dbcDatabase) {
             val uid = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
             val max = maxRatingFor(db, uid)
             val withArt = suspendTransaction(db) {
-                MediaItems.selectAll().where { MediaItems.backdrop.isNotNull() }
+                // #128: owner home row — de-indexed Titles excluded (notDeindexedOp); no TMDB gate.
+                MediaItems.selectAll().where { MediaItems.backdrop.isNotNull() and notDeindexedOp() }
                     .orderBy(MediaItems.createdAt to SortOrder.DESC)
                     .limit(8)
                     .map { it.toMediaItem() }
@@ -59,14 +60,17 @@ fun Route.homeRoutes(db: R2dbcDatabase) {
 }
 
 private suspend fun recent(db: R2dbcDatabase, n: Int): List<MediaListItem> = suspendTransaction(db) {
-    MediaItems.selectAll().orderBy(MediaItems.createdAt to SortOrder.DESC).limit(n)
+    // #128: owner recently-added fallback — de-index-only gate (notDeindexedOp).
+    MediaItems.selectAll().where { notDeindexedOp() }
+        .orderBy(MediaItems.createdAt to SortOrder.DESC).limit(n)
         .map { it.toMediaItem() }.toList()
 }
 
 // Fetch + reorder to match the ranked id list. Library is small, so a full read is fine.
 private suspend fun byIds(db: R2dbcDatabase, ids: List<UUID>): List<MediaListItem> {
     val byId = suspendTransaction(db) {
-        MediaItems.selectAll().map { it.toMediaItem() }.toList()
+        // #128: drop de-indexed Titles so they can't ride "top" back into an owner row.
+        MediaItems.selectAll().where { notDeindexedOp() }.map { it.toMediaItem() }.toList()
     }.associateBy { UUID.fromString(it.id) }
     return ids.mapNotNull { byId[it] }
 }

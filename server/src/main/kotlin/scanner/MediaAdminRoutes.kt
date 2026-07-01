@@ -27,6 +27,10 @@ data class SetContentRatingRequest(val contentRating: String? = null)
 @Serializable
 data class BackfillResult(val scanned: Int, val enriched: Int, val missed: Int)
 
+// #128: operator de-index toggle payload.
+@Serializable
+class DeindexRequest(val deindexed: Boolean)
+
 // 404 over 403 — don't leak admin surface.
 private fun ApplicationCall.assertAdmin() {
     if (principal<JWTPrincipal>()?.payload?.getClaim("admin")?.asBoolean() != true) {
@@ -71,6 +75,24 @@ fun Route.mediaAdminRoutes(db: R2dbcDatabase, tmdb: TmdbClient) {
             val n = suspendTransaction(db) {
                 MediaItems.update({ MediaItems.id eq id }) {
                     it[MediaItems.contentRating] = normalizeRating(req.contentRating)
+                }
+            }
+            if (n == 0) throw NotFoundException()
+            call.respond(HttpStatusCode.NoContent)
+        }
+
+        // #128: operator de-index toggle. Hides the Title from public discovery
+        // (browse/search/home/Stremio) without deleting the row or its Copies;
+        // set deindexed=false to re-index. TMDB allowlist gate is separate and
+        // automatic (a Title with no tmdb_id stays private regardless).
+        // ponytail: reuses assertAdmin + the same update path as content-rating.
+        post("/admin/media/{id}/deindex") {
+            call.assertAdmin()
+            val id = UUID.fromString(call.parameters["id"]!!)
+            val req = call.receive<DeindexRequest>()
+            val n = suspendTransaction(db) {
+                MediaItems.update({ MediaItems.id eq id }) {
+                    it[MediaItems.deindexed] = req.deindexed
                 }
             }
             if (n == 0) throw NotFoundException()

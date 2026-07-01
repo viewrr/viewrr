@@ -64,10 +64,14 @@ class MediaSearchService(private val db: R2dbcDatabase) {
     )
 
     private companion object {
+        // #128: search is an OWNER surface — mirrors notDeindexedOp() (de-index only,
+        // NO TMDB gate; owners search their own non-matched media). Keep in sync with
+        // MediaModeration.isVisibleToOwner.
         private val SEARCH_SQL = """
             SELECT id, title, hls_path, duration_secs, mime_type, content_rating, paradedb.score(id) AS score
             FROM media_items
             WHERE title @@@ ?
+              AND deindexed = false
             ORDER BY score DESC
             LIMIT ?
         """.trimIndent()
