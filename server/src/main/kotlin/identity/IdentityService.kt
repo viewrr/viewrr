@@ -27,18 +27,20 @@ class IdentityService(
         val pk = Ed25519Verifier.normalizeKey(req.publicKey)
         if (!Ed25519Verifier.verify(pk, req.signature, REGISTER_MESSAGE)) throw IdentityError.BadSignature()
 
-        accounts.findByPublicKey(pk)?.let { return AccountView(it.id.toString(), it.publicKey) to false }
+        // ponytail: displayName is set once, at first register. Re-registering an existing key
+        // returns the stored row unchanged (no overwrite) — an authed rename is a later increment.
+        accounts.findByPublicKey(pk)?.let { return it.toView() to false }
         val row = try {
-            accounts.create(pk)
+            accounts.create(pk, req.displayName)
         } catch (e: Exception) {
             // Lost a create race: another request inserted the same key between our lookup and insert.
             if (isUniqueViolation(e)) {
                 val existing = accounts.findByPublicKey(pk) ?: throw e
-                return AccountView(existing.id.toString(), existing.publicKey) to false
+                return existing.toView() to false
             }
             throw e
         }
-        return AccountView(row.id.toString(), row.publicKey) to true
+        return row.toView() to true
     }
 
     /** Mint a fresh single-use challenge nonce for the client to sign. */
@@ -58,6 +60,8 @@ class IdentityService(
             tokens.issueRefresh(account.id),
         )
     }
+
+    private fun IdentityAccountRow.toView() = AccountView(id.toString(), publicKey, displayName)
 
     private fun isUniqueViolation(e: Throwable): Boolean {
         var cur: Throwable? = e

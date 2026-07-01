@@ -35,6 +35,7 @@ object Users : UUIDTable("users") {
 object IdentityAccounts : UUIDTable("identity_accounts") {
     val publicKey = text("public_key").uniqueIndex()
     val createdAt = timestamp("created_at")
+    val displayName = text("display_name").nullable() // #120 inc 2: cosmetic petname, NOT unique
 }
 
 // Phase 14 (#72): a Node owns raw bytes; Hub holds this row. mesh/client addresses
