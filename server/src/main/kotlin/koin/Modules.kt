@@ -11,6 +11,10 @@ import wtf.jobin.auth.UserRepository
 import wtf.jobin.config.AppConfig
 import wtf.jobin.collection.CollectionRepository
 import wtf.jobin.db.connectDatabase
+import wtf.jobin.identity.ChallengeStore
+import wtf.jobin.identity.IdentityAccountRepository
+import wtf.jobin.identity.IdentityService
+import wtf.jobin.identity.RedisChallengeStore
 import wtf.jobin.media.MediaSearchService
 import wtf.jobin.music.MusicProbe
 import wtf.jobin.music.MusicRepository
@@ -52,6 +56,14 @@ val authModule = module {
     single { TokenService(get<AppConfig>().auth, get()) }
     single { UserRepository(get()) }
     single { AuthService(get(), get(), get()) }
+}
+
+// #120 (P2P-ADR 0001): self-custody identity. Reuses TokenService (session tokens) + Redis
+// (challenge nonces) — no new backend, alongside the Keycloak/user auth above.
+val identityModule = module {
+    single { IdentityAccountRepository(get()) }
+    single<ChallengeStore> { RedisChallengeStore(get<RedisAsyncCommands<String, String>>()) }
+    single { IdentityService(get(), get(), get()) }
 }
 
 val scannerModule = module {

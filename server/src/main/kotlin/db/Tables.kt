@@ -27,6 +27,16 @@ object Users : UUIDTable("users") {
     val updatedAt = timestamp("updated_at")
 }
 
+// #120 (P2P-ADR 0001): self-custody identity. An account is keyed by its Ed25519 public
+// key (lowercase hex, UNIQUE); the internal UUID id is what the reused JWT/session subject
+// carries. Added ALONGSIDE Users — Keycloak/argon2 retirement is a separate follow-up.
+// ponytail: minimal by design — no display name / roles here yet; they attach when the
+// client mnemonic flow and Keycloak cutover land.
+object IdentityAccounts : UUIDTable("identity_accounts") {
+    val publicKey = text("public_key").uniqueIndex()
+    val createdAt = timestamp("created_at")
+}
+
 // Phase 14 (#72): a Node owns raw bytes; Hub holds this row. mesh/client addresses
 // + last_seen filled at register/heartbeat (#69, #71, #83).
 object Nodes : UUIDTable("nodes") {
