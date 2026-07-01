@@ -36,6 +36,7 @@ data class MediaListItem(
     // TMDB star rating (V16 editorial). Clients render stars on the thumbnail. Null until enriched.
     val tmdbVoteAverage: Float? = null, // 0.0..10.0
     val tmdbVoteCount: Int? = null,
+    val contentUuid: String? = null, // #124: P2P swarm content address (null if no tmdbId)
 )
 
 internal fun ResultRow.toMediaItem() = MediaListItem(
@@ -54,6 +55,7 @@ internal fun ResultRow.toMediaItem() = MediaListItem(
     overview = this[MediaItems.overview],
     tmdbVoteAverage = this[MediaItems.tmdbVoteAverage],
     tmdbVoteCount = this[MediaItems.tmdbVoteCount],
+    contentUuid = this[MediaItems.contentUuid]?.toString(),
 )
 
 /**
