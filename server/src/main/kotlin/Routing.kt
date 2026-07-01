@@ -10,6 +10,8 @@ import wtf.jobin.auth.AuthService
 import wtf.jobin.auth.UserRepository
 import wtf.jobin.auth.adminUserRoutes
 import wtf.jobin.auth.authRoutes
+import wtf.jobin.identity.IdentityService
+import wtf.jobin.identity.identityRoutes
 import wtf.jobin.media.MediaSearchService
 import wtf.jobin.music.MusicScanner
 import wtf.jobin.music.musicRoutes
@@ -75,6 +77,7 @@ fun Application.configureRouting() {
         return
     }
     val auth by inject<AuthService>()
+    val identity by inject<IdentityService>()
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
     val tmdb by inject<TmdbClient>()
@@ -100,6 +103,7 @@ fun Application.configureRouting() {
     routing {
         get("/health") { call.respondText("ok") }
         authRoutes(auth)
+        identityRoutes(identity)
         adminUserRoutes(users)
         scannerRoutes(scanner, musicScanner)
         libraryRoutes(libraries, libraryWatcher, scanner, musicScanner)
