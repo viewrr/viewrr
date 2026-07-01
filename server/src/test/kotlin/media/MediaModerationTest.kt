@@ -5,33 +5,61 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * #128: self-check on the public-catalog visibility rule. This asserts the
- * canonical Kotlin predicate that every discovery surface mirrors in SQL
- * (publicCatalogOp() for Exposed queries; the WHERE clause in MediaSearchService
- * for the raw BM25 query). If this rule ever changes, those SQL mirrors must too.
+ * #128: self-check on the SPLIT visibility rules.
+ *
+ *  - Owner surfaces (`/media` browse, `/home` rows, `/media/search`) mirror
+ *    [MediaModeration.isVisibleToOwner] (de-index only) in SQL — notDeindexedOp()
+ *    and the `deindexed = false` WHERE clause in MediaSearchService.
+ *  - The public Stremio catalog mirrors [MediaModeration.isPubliclyIndexable]
+ *    (de-index AND TMDB allowlist) via publicCatalogOp().
+ *
+ * If either rule changes, its SQL mirrors must change with it.
  */
 class MediaModerationTest {
 
+    // --- Owner surfaces: de-index only ---
+
     @Test
-    fun deindexedTitleIsExcluded() {
-        // De-indexed by an operator — hidden even with a valid TMDB match.
+    fun ownerSeesNonTmdbTitle() {
+        // The key split property: a non-deindexed Title with no TMDB match is still
+        // visible to its owner — a missing match must not hide owner media.
+        assertTrue(MediaModeration.isVisibleToOwner(deindexed = false))
+    }
+
+    @Test
+    fun ownerDoesNotSeeDeindexedTitle() {
+        assertFalse(MediaModeration.isVisibleToOwner(deindexed = true))
+    }
+
+    // --- Public Stremio catalog: de-index AND TMDB allowlist ---
+
+    @Test
+    fun publicExcludesDeindexedTitle() {
+        // De-indexed => hidden even with a valid TMDB match.
         assertFalse(MediaModeration.isPubliclyIndexable(deindexed = true, tmdbId = 603))
     }
 
     @Test
-    fun nonTmdbTitleIsExcluded() {
+    fun publicExcludesNonTmdbTitle() {
         // Allowlist gate: no TMDB match => private-by-default, even if not de-indexed.
         assertFalse(MediaModeration.isPubliclyIndexable(deindexed = false, tmdbId = null))
     }
 
     @Test
-    fun deindexedAndNonTmdbIsExcluded() {
+    fun publicExcludesDeindexedAndNonTmdb() {
         assertFalse(MediaModeration.isPubliclyIndexable(deindexed = true, tmdbId = null))
     }
 
     @Test
-    fun matchedAndNotDeindexedIsSurfaced() {
-        // The only surfaced case: TMDB-matched and not de-indexed.
+    fun publicSurfacesMatchedNonDeindexedTitle() {
         assertTrue(MediaModeration.isPubliclyIndexable(deindexed = false, tmdbId = 603))
+    }
+
+    // --- The split, stated as one assertion ---
+
+    @Test
+    fun nonTmdbNonDeindexedIsOwnerVisibleButNotPublic() {
+        assertTrue(MediaModeration.isVisibleToOwner(deindexed = false))
+        assertFalse(MediaModeration.isPubliclyIndexable(deindexed = false, tmdbId = null))
     }
 }

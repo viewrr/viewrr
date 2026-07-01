@@ -1,13 +1,18 @@
 -- #128 (P2P / Self-Custody Re-architecture): De-index-only moderation + TMDB allowlist.
 --
 -- deindexed: operator blocklist flag. When true the Title is hidden from every
--- PUBLIC DISCOVERY surface (browse, search, home rows, Stremio catalog) but the
--- row and its physical Copies are NOT deleted — direct-by-id detail/playback and
--- owner/admin tools still resolve it. De-index HIDES; it never removes bytes.
+-- discovery surface (owner browse/search/home AND the public Stremio catalog) but
+-- the row and its physical Copies are NOT deleted — direct-by-id detail/playback
+-- and owner/admin tools still resolve it. De-index HIDES; it never removes bytes.
 --
--- TMDB allowlist gate: reuses the existing tmdb_id column (V9). A Title with
--- tmdb_id IS NULL is private-by-default and never surfaced in the public catalog.
--- No new column is needed for the allowlist — the gate is (tmdb_id IS NOT NULL).
+-- The visibility gate is SPLIT by surface audience (see MediaModeration.kt):
+--   * OWNER surfaces (/media browse, /home rows, /media/search): de-index ONLY.
+--     Owners keep seeing their own Titles even with no TMDB match.
+--   * PUBLIC Stremio catalog: de-index AND the TMDB allowlist gate below.
+--
+-- TMDB allowlist gate: reuses the existing tmdb_id column (V9). On the PUBLIC
+-- surface only, a Title with tmdb_id IS NULL is private-by-default and never
+-- surfaced. No new column is needed — the gate is (tmdb_id IS NOT NULL).
 --
 -- ponytail: one boolean, DEFAULT false, so every existing Title keeps its prior
 -- visibility (still subject to the tmdb_id allowlist gate). No partial index yet —
