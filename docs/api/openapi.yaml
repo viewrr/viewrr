@@ -597,6 +597,7 @@ components:
         poster: { type: [string, "null"], format: uri, description: TMDb poster URL }
         backdrop: { type: [string, "null"], format: uri, description: TMDb backdrop URL }
         overview: { type: [string, "null"] }
+        contentUuid: { type: [string, "null"], format: uuid, description: "#124 P2P content address (UUIDv5 of tmdbId); null when no tmdbId" }
 
     ShowView:
       type: object
