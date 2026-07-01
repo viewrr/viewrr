@@ -16,6 +16,7 @@ data class AppConfig(
     val cors: Cors,
     val recs: Recs,
     val scanner: Scanner,
+    val editorial: Editorial,
     val cluster: Cluster,
     val agent: Agent,
     val acquisition: Acquisition, // Phase 17 (#86..#93)
@@ -69,6 +70,9 @@ data class AppConfig(
     data class Recs(val grpcTarget: String)
 
     data class Scanner(val fallbackIntervalMinutes: Long)
+
+    // Editorial ingest refresh cadence. <=0 disables the periodic loop (manual /admin/editorial/refresh only).
+    data class Editorial(val refreshIntervalMinutes: Long)
 
     // Phase 14 (#73): enrollment secret an Agent presents at register to receive a per-node token.
     data class Cluster(val enrollmentSecret: String)
@@ -151,6 +155,10 @@ data class AppConfig(
             scanner = Scanner(
                 fallbackIntervalMinutes = env.config.propertyOrNull("viewrr.scanner.fallbackIntervalMinutes")
                     ?.getString()?.toLong() ?: 15,
+            ),
+            editorial = Editorial(
+                refreshIntervalMinutes = env.config.propertyOrNull("viewrr.editorial.refreshIntervalMinutes")
+                    ?.getString()?.toLong() ?: 360, // 6h; 0 disables
             ),
             cluster = Cluster(
                 enrollmentSecret = env.config.propertyOrNull("viewrr.cluster.enrollmentSecret")

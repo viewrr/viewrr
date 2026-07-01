@@ -127,4 +127,5 @@ fun Application.configureRouting() {
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
     }
     partyHub.startFlushLoop(this)
+    editorialIngest.startRefreshLoop(this, appConfig.editorial.refreshIntervalMinutes)
 }
