@@ -78,6 +78,7 @@ object MediaItems : UUIDTable("media_items") {
     val episodeNumber = integer("episode_number").nullable()
     val contentRating = varchar("content_rating", 16).nullable()
     val tmdbId = integer("tmdb_id").nullable()
+    val contentUuid = javaUUID("content_uuid").nullable() // #124: UUIDv5(tmdbId) DHT content address
     val poster = text("poster").nullable()
     val backdrop = text("backdrop").nullable()
     val overview = text("overview").nullable()
