@@ -69,3 +69,20 @@ the key never travels in the clear) is increment 5b.
 
 Crypto golden is JS-verified (`sodium-universal` runs under node too); CI covers the JVM decryptor
 RPC shape. Actual segment transfer over the swarm connection is 5c.
+
+### 5b — pubkey-sealed key (the key never travels in the clear)
+
+`seal.mjs`: the content key is delivered **sealed to the user's identity pubkey** (libsodium
+anonymous sealed box over the ed25519→curve25519 identity key) and opened only inside the worklet
+with that user's secret key. Replaces 5a's raw `setContentKey`.
+
+- `sealKeyTo(contentKey, ed25519Pub)` (owner/ingest + tests) → 80-byte blob for a 32-byte key.
+- `openSealedKey(sealedHex, pub, sk)` (worklet) — round-trip is deterministic (`open(seal(k))===k`)
+  even though the blob is not (ephemeral sender key); wrong key / tamper → throws.
+- `ping.mjs`: `loadIdentity {seedHex}` (persists the keypair; returns only the public key) then
+  `openContentKey {sealedHex, baseNonceHex}` (opens with the identity secret key, sets the content
+  key — never echoed). `ClearKeyDecryptor` drives both.
+
+Now neither the content key nor the identity secret key ever crosses the RPC seam. ponytail: the
+seed still arrives over the seam in `loadIdentity` (bootstrap); generating it in-worklet so even the
+seed never crosses is the identity-custody increment. Segment transfer over the swarm is 5c.

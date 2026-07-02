@@ -11,16 +11,20 @@
 // `{"id":N,"error":..}`. Unknown methods are ignored (no reply), matching WorkletRpc's
 // ignore-unknown-id path. Slices 2-3 pull in hypercore-crypto + hyperswarm, so this is no longer
 // import-free — it needs `npm i` in worklet/ and a bare/node runtime with the deps.
+import crypto from 'hypercore-crypto'
 import { deriveIdentity } from './identity.mjs'
+import { openSealedKey } from './seal.mjs'
 import { swarmTopic } from './topic.mjs'
 import { openStdio } from './stdio.mjs'
 import { decryptSegment } from './clearkey.mjs'
 import Hyperswarm from 'hyperswarm'
 
-// #121 slice 5a / #122: the content key + base nonce live ONLY here, set via setContentKey and
-// never emitted back over the seam. decryptSegment returns plaintext bytes; the key does not.
-// ponytail: setContentKey takes the raw key for now (bootstrap); opening a pubkey-sealed blob with
-// the worklet secretKey — so the key never travels in the clear even to here — is increment 5b.
+// #121 slice 5b / #122: identity keypair (from the seed) + the content key live ONLY here. The
+// content key arrives SEALED (openContentKey) and is opened with the identity secret key in-worklet;
+// the raw key never crosses the seam. identityKeyPair.secretKey never leaves either.
+let identityKeyPair = null
+// #121 slice 5b / #122: the content key + base nonce live ONLY here, opened from a sealed blob via
+// openContentKey and never emitted back over the seam. decryptSegment returns plaintext; not the key.
 let contentKey = null
 let baseNonce = null
 
@@ -107,9 +111,21 @@ stdin.on('data', (chunk) => {
       lookup(msg.params?.contentUuid, msg.params?.timeoutMs)
         .then((result) => stdout.write(JSON.stringify({ id: msg.id, result }) + '\n'))
         .catch((e) => stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n'))
-    } else if (msg.method === 'setContentKey') {
+    } else if (msg.method === 'loadIdentity') {
+      // Bootstrap the identity keypair from the seed. ponytail: seed still arrives over the seam
+      // here; generating it in-worklet so it never crosses is the identity-custody increment.
       try {
-        contentKey = Buffer.from(msg.params?.keyHex ?? '', 'hex')
+        identityKeyPair = crypto.keyPair(Buffer.from(msg.params?.seedHex ?? '', 'hex'))
+        stdout.write(JSON.stringify({ id: msg.id, result: { publicKey: identityKeyPair.publicKey.toString('hex') } }) + '\n')
+      } catch (e) {
+        identityKeyPair = null
+        stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
+      }
+    } else if (msg.method === 'openContentKey') {
+      // Sealed content key in; opened with the identity secret key. Raw key never crosses the seam.
+      try {
+        if (identityKeyPair === null) throw new Error('identity not loaded')
+        contentKey = openSealedKey(msg.params?.sealedHex ?? '', identityKeyPair.publicKey, identityKeyPair.secretKey)
         baseNonce = Buffer.from(msg.params?.baseNonceHex ?? '', 'hex')
         if (contentKey.length !== 32 || baseNonce.length !== 16) throw new Error('bad key/nonce length')
         stdout.write(JSON.stringify({ id: msg.id, result: { ok: true } }) + '\n') // key is NOT echoed

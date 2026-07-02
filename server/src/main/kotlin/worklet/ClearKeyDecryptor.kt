@@ -18,10 +18,21 @@ import kotlinx.serialization.json.put
 class ClearKeyDecryptor(
     private val callWorklet: suspend (method: String, params: JsonElement?) -> JsonElement?,
 ) {
-    /** Load the content key + 16-byte base nonce into the worklet. False when down/disabled/rejected. */
-    suspend fun setContentKey(keyHex: String, baseNonceHex: String): Boolean {
-        val params = buildJsonObject { put("keyHex", keyHex); put("baseNonceHex", baseNonceHex) }
-        val result = callWorklet("setContentKey", params) as? JsonObject ?: return false
+    /** Bootstrap the worklet's identity keypair from a seed. False when down/disabled/rejected. */
+    suspend fun loadIdentity(seedHex: String): Boolean {
+        val params = buildJsonObject { put("seedHex", seedHex) }
+        val result = callWorklet("loadIdentity", params) as? JsonObject ?: return false
+        return result["publicKey"]?.jsonPrimitive?.content != null
+    }
+
+    /**
+     * Hand the worklet a content key SEALED to its identity pubkey (+ 16-byte base nonce). The
+     * worklet opens it with its own secret key; the raw key never crosses the seam. Requires a
+     * prior [loadIdentity]. False when down/disabled or the seal fails to open.
+     */
+    suspend fun openContentKey(sealedHex: String, baseNonceHex: String): Boolean {
+        val params = buildJsonObject { put("sealedHex", sealedHex); put("baseNonceHex", baseNonceHex) }
+        val result = callWorklet("openContentKey", params) as? JsonObject ?: return false
         return result["ok"]?.jsonPrimitive?.booleanOrNull == true
     }
 

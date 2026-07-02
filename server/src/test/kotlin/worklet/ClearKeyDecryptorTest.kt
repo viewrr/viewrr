@@ -14,14 +14,24 @@ import kotlin.test.assertTrue
 /** #121 slice 5a: decryptor sends the right RPC params, parses plaintext, and degrades to null when down. */
 class ClearKeyDecryptorTest {
     @Test
-    fun setContentKeySendsParamsAndParsesOk() = runBlocking {
+    fun loadIdentitySendsSeedAndParsesPublicKey() = runBlocking {
+        var captured: Pair<String, JsonElement?>? = null
+        val dec = ClearKeyDecryptor { m, p -> captured = m to p; buildJsonObject { put("publicKey", "3b6a") } }
+
+        assertTrue(dec.loadIdentity("00".repeat(32)))
+        assertEquals("loadIdentity", captured!!.first)
+        assertEquals("00".repeat(32), (captured!!.second as JsonObject)["seedHex"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun openContentKeySendsSealedBlobAndParsesOk() = runBlocking {
         var captured: Pair<String, JsonElement?>? = null
         val dec = ClearKeyDecryptor { m, p -> captured = m to p; buildJsonObject { put("ok", true) } }
 
-        assertTrue(dec.setContentKey("aa".repeat(32), "00".repeat(16)))
-        assertEquals("setContentKey", captured!!.first)
+        assertTrue(dec.openContentKey("beef".repeat(20), "00".repeat(16)))
+        assertEquals("openContentKey", captured!!.first)
         val params = captured!!.second as JsonObject
-        assertEquals("aa".repeat(32), params["keyHex"]!!.jsonPrimitive.content)
+        assertEquals("beef".repeat(20), params["sealedHex"]!!.jsonPrimitive.content)
         assertEquals("00".repeat(16), params["baseNonceHex"]!!.jsonPrimitive.content)
     }
 
@@ -45,6 +55,7 @@ class ClearKeyDecryptorTest {
     fun workletDownYieldsNullAndFalse() = runBlocking {
         val dec = ClearKeyDecryptor { _, _ -> null }
         assertNull(dec.decryptSegment(0, "00"))
-        assertTrue(!dec.setContentKey("aa".repeat(32), "00".repeat(16)))
+        assertTrue(!dec.loadIdentity("00".repeat(32)))
+        assertTrue(!dec.openContentKey("beef".repeat(20), "00".repeat(16)))
     }
 }
