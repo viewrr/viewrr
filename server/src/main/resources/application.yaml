@@ -80,3 +80,9 @@ viewrr:
     torrentRpcToken: "$ACQUISITION_TORRENT_RPC_TOKEN:" # token for the RPC client
     # #91 Prowlarr: arr apps drive indexers (Prowlarr aggregates them) and write grabs to the
     # blackhole; viewrr orchestrates the blackhole only — no Prowlarr/indexer client lives here.
+  worklet:                                                                # #121 slice 1 (P2P-ADR 0003) — DEFAULT-OFF
+    enabled: "$WORKLET_ENABLED:false"          # master switch; false => no subprocess spawned, ping() false (zero regression)
+    command: "$WORKLET_COMMAND:bare worklet/ping.mjs"   # space-split argv for the worklet subprocess
+    pingTimeoutMs: "$WORKLET_PING_TIMEOUT_MS:2000"
+    maxRestartAttempts: "$WORKLET_MAX_RESTART_ATTEMPTS:5"
+    backoffBaseMs: "$WORKLET_BACKOFF_BASE_MS:500"
