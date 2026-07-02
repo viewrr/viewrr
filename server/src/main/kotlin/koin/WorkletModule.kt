@@ -7,6 +7,7 @@ import wtf.jobin.worklet.AnnounceRepository
 import wtf.jobin.worklet.ProcessSpawner
 import wtf.jobin.worklet.RealProcessSpawner
 import wtf.jobin.worklet.WorkletAnnouncer
+import wtf.jobin.worklet.WorkletResolver
 import wtf.jobin.worklet.WorkletSupervisor
 
 /**
@@ -25,4 +26,7 @@ val workletModule = module {
         val supervisor = get<WorkletSupervisor>()
         WorkletAnnouncer(get<AnnounceRepository>(), supervisor::call, get<AppConfig>().worklet.announceIntervalMs)
     }
+    // #121 slice 4: lookup-only capability. Lazy single, no loop, wired to no route yet — slice 5
+    // is what consumes it. ponytail: exists so #124/#125 have a seam; default resolve path untouched.
+    single { WorkletResolver(get<WorkletSupervisor>()::call) }
 }
