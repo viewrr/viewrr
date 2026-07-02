@@ -43,7 +43,8 @@ class IdentityServiceTest {
     private fun service(
         accounts: FakeIdentityAccountRepository = FakeIdentityAccountRepository(),
         challenges: FakeChallengeStore = FakeChallengeStore(),
-    ) = IdentityService(accounts, challenges, FakeTokenService())
+        adminKeys: Set<String> = emptySet(),
+    ) = IdentityService(accounts, challenges, FakeTokenService(), adminKeys)
 
     // ---- register ----
 
@@ -173,5 +174,39 @@ class IdentityServiceTest {
         assertFailsWith<IdentityError.UnknownAccount> {
             svc.verify(VerifyIdentityRequest(id.publicKeyHex, challenge, id.sign(challenge)))
         }
+    }
+
+    // ---- admin allowlist (#120: admin claim source after Keycloak retirement) ----
+    // FakeTokenService.issueAccess encodes isAdmin as the trailing "access:<uuid>:<isAdmin>",
+    // so the token suffix proves which admin flag the verify path minted.
+
+    @Test
+    fun verifyGrantsAdminWhenKeyOnAllowlist() = runIdentityTest {
+        val accounts = FakeIdentityAccountRepository()
+        val challenges = FakeChallengeStore()
+        val id = Ed25519TestIdentity()
+        val svc = service(accounts, challenges, adminKeys = setOf(id.publicKeyHex))
+        svc.register(RegisterIdentityRequest(id.publicKeyHex, id.sign(IdentityService.REGISTER_MESSAGE)))
+
+        val challenge = svc.issueChallenge().challenge
+        val pair = svc.verify(VerifyIdentityRequest(id.publicKeyHex, challenge, id.sign(challenge)))
+
+        assertTrue(pair.accessToken.endsWith(":true"), "admin key must mint an admin access token")
+    }
+
+    @Test
+    fun verifyIsNonAdminWhenKeyNotOnAllowlist() = runIdentityTest {
+        val accounts = FakeIdentityAccountRepository()
+        val challenges = FakeChallengeStore()
+        val id = Ed25519TestIdentity()
+        val other = Ed25519TestIdentity()
+        // Allowlist holds a DIFFERENT key — this identity must not be admin.
+        val svc = service(accounts, challenges, adminKeys = setOf(other.publicKeyHex))
+        svc.register(RegisterIdentityRequest(id.publicKeyHex, id.sign(IdentityService.REGISTER_MESSAGE)))
+
+        val challenge = svc.issueChallenge().challenge
+        val pair = svc.verify(VerifyIdentityRequest(id.publicKeyHex, challenge, id.sign(challenge)))
+
+        assertTrue(pair.accessToken.endsWith(":false"), "non-allowlisted key must be non-admin")
     }
 }
