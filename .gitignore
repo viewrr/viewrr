@@ -32,3 +32,6 @@ skills-lock.json
 .env.local
 *.log
 .wrangler/
+
+# #121 worklet: JS deps are pinned in worklet/package.json; do not commit installed modules
+worklet/node_modules/

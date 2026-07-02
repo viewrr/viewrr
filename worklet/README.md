@@ -8,3 +8,22 @@ default-OFF `WORKLET_ENABLED` flag; it carries no P2P/Hyper\*/swarm logic yet. V
 cross-repo distribution (a versioned package so every platform pins the same build — a mismatched
 worklet is a partitioned swarm) are deliberately deferred and will be formalized in a later slice
 per the #121 plan.
+
+## Slice 2 — identity (#121)
+
+`identity.mjs` derives an Ed25519 self-custody keypair from a 32-byte seed via `hypercore-crypto`
+(the stack HyperDHT keys on) and signs the Hub's `REGISTER_MESSAGE`. Signatures made here verify
+under the Hub's pure-JDK `Ed25519Verifier` (#135) — proven by
+`server/src/test/kotlin/worklet/WorkletIdentityParityTest.kt`. So one mnemonic = one identity across
+app auth and the P2P swarm.
+
+- `ping.mjs` now also answers `{"method":"identity","params":{"seed":"<32-byte hex>"}}` →
+  `{ publicKey, signature }` (lowercase hex).
+- `node derive.mjs [seedHex]` regenerates the golden fixture pinned in the parity test.
+
+**Frozen contract** (#142 mobile + viewrr-web reproduce byte-for-byte): keyPair seed = the first 32
+bytes of the BIP39-512 seed; `hypercore-crypto.keyPair(seed)`; `REGISTER_MESSAGE = "viewrr:register"`.
+Golden (all-zero seed) → pubkey `3b6a27bc…59da29`.
+
+Deps are pinned in `package.json`; run `npm i` in this dir before invoking. `node_modules/` is
+gitignored.
