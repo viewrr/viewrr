@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bare-pipe": "^4.2.2",
     "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.0"
   }

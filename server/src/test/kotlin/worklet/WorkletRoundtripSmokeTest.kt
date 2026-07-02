@@ -23,13 +23,15 @@ import kotlin.test.assertTrue
  * `ping`, asserts `pong`, then tears the process down cleanly. That is the "JVM ↔ worklet" seam
  * proven against a real JS runtime, not a mock.
  *
- * Runtime selection (env `WORKLET_TEST_RUNTIME` wins, else auto): the shipped `ping.mjs` uses Node's
- * `process.stdin/stdout` globals, so it runs today under **node**. It does NOT yet run under **bare**
- * (`ReferenceError: process is not defined` — Bare exposes stdio via `bare-pipe`/`bare-process`, not
- * a Node `process` global). Porting the worklet's stdio to Bare's API is a worklet-code change owned
- * by a later slice, out of scope for this test-only increment.
- * ponytail: default the probe to node (the runtime the shipped worklet actually supports); once the
- * worklet stdio is Bare-native, flip the default to `bare` and this same test proves it unchanged.
+ * Runtime selection (env `WORKLET_TEST_RUNTIME` wins, else auto): the worklet's stdio is now
+ * Bare-native — `ping.mjs` drives stdin/stdout through `bare-pipe` (fd 0/1) and reads argv/exit off
+ * Bare's built-in `Bare` global instead of Node's `process` (see `worklet/stdio.mjs`). So the default
+ * probe is **bare**, the worklet's intended runtime. It no longer runs under **node** (the shim
+ * touches `Bare.argv` at import, which is `undefined` there), so we deliberately do NOT fall back to
+ * node — that would crash the bare-native worklet instead of skipping. Point `WORKLET_TEST_RUNTIME`
+ * at a specific bare binary if it isn't the one first on PATH.
+ * ponytail: this is the SAME roundtrip the node stopgap ran — only the default runtime flipped
+ * node -> bare once the worklet stdio was ported; the assertion (ping -> pong) is unchanged.
  *
  * Gating (honesty over a green checkmark, per #121): when no usable runtime is on PATH, or the
  * worklet's JS deps aren't installed (`worklet/node_modules` — `ping.mjs` imports hypercore-crypto
@@ -54,7 +56,7 @@ class WorkletRoundtripSmokeTest {
         }
         val runtime = resolveRuntime()
         if (runtime == null) {
-            println("[worklet-roundtrip] SKIPPED: no worklet runtime on PATH (set WORKLET_TEST_RUNTIME, or install `node`/`bare`)")
+            println("[worklet-roundtrip] SKIPPED: no `bare` runtime on PATH (set WORKLET_TEST_RUNTIME, or install `bare`)")
             return@runBlocking
         }
 
@@ -85,14 +87,15 @@ class WorkletRoundtripSmokeTest {
 
     /**
      * Pick a runtime binary. Explicit `WORKLET_TEST_RUNTIME` wins (name or absolute path); otherwise
-     * probe node first (shipped-worklet compatible), then bare. Returns null if none is executable.
+     * probe **bare** — the worklet's now-native, and only, runtime. No node fallback: the bare-native
+     * worklet can't run under node, so falling back would fail instead of skip. Null if bare is absent.
      */
     private fun resolveRuntime(): File? {
         System.getenv("WORKLET_TEST_RUNTIME")?.takeIf { it.isNotBlank() }?.let { spec ->
             val direct = File(spec)
             return if (direct.isAbsolute && direct.canExecute()) direct else onPath(spec)
         }
-        return onPath("node") ?: onPath("bare")
+        return onPath("bare")
     }
 
     /** First executable named [cmd] on PATH, or null. */

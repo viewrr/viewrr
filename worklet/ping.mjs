@@ -1,4 +1,4 @@
-// #121 worklet entry — newline-delimited JSON-RPC over stdio (bare subprocess / node dev).
+// #121 worklet entry — newline-delimited JSON-RPC over stdio, running on Bare (its intended runtime).
 //
 // Methods:
 //   ping                       -> "pong"                                (slice 1, health)
@@ -12,7 +12,13 @@
 // import-free — it needs `npm i` in worklet/ and a bare/node runtime with the deps.
 import { deriveIdentity } from './identity.mjs'
 import { swarmTopic } from './topic.mjs'
+import { openStdio } from './stdio.mjs'
 import Hyperswarm from 'hyperswarm'
+
+// Bare-native stdio (P2P-ADR 0003): stdin/stdout are bare-pipe streams over fd 0/1, not Node's
+// `process` global (which Bare, the intended runtime, does not define). See stdio.mjs. Wire
+// protocol is unchanged — newline-delimited JSON frames, as WorkletRpc expects.
+const { stdin, stdout } = openStdio()
 
 // #121 slice 3: announce-only. Lazy single swarm; join each content topic as provider (server:true).
 // joinedTopics makes re-announce idempotent. ponytail: join is fire-and-forget advertisement —
@@ -34,7 +40,7 @@ function announce(contentUuids) {
 
 let buffer = ''
 
-process.stdin.on('data', (chunk) => {
+stdin.on('data', (chunk) => {
   buffer += chunk // Buffer or string; += coerces to utf8 text, fine for ASCII JSON on bare and node
   let index
   while ((index = buffer.indexOf('\n')) >= 0) {
@@ -51,27 +57,27 @@ process.stdin.on('data', (chunk) => {
 
     if (!msg || msg.id === undefined) continue
     if (msg.method === 'ping') {
-      process.stdout.write(JSON.stringify({ id: msg.id, result: 'pong' }) + '\n')
+      stdout.write(JSON.stringify({ id: msg.id, result: 'pong' }) + '\n')
     } else if (msg.method === 'identity') {
       // params.seed is the 32-byte keyPair seed (hex). ponytail: slice 2 passes seeds over the
       // seam for the parity/bootstrap path; production key custody (seed born in-worklet, never
       // crossing the seam) is a later slice per the #121 plan.
       try {
         const result = deriveIdentity(msg.params?.seed)
-        process.stdout.write(JSON.stringify({ id: msg.id, result }) + '\n')
+        stdout.write(JSON.stringify({ id: msg.id, result }) + '\n')
       } catch (e) {
-        process.stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
+        stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
       }
     } else if (msg.method === 'announce') {
       try {
         const result = announce(msg.params?.contentUuids)
-        process.stdout.write(JSON.stringify({ id: msg.id, result }) + '\n')
+        stdout.write(JSON.stringify({ id: msg.id, result }) + '\n')
       } catch (e) {
-        process.stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
+        stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
       }
     } else if (msg.method === 'swarmStatus') {
       const peers = swarm ? swarm.connections.size : 0
-      process.stdout.write(JSON.stringify({ id: msg.id, result: { topics: [...joinedTopics], peers } }) + '\n')
+      stdout.write(JSON.stringify({ id: msg.id, result: { topics: [...joinedTopics], peers } }) + '\n')
     }
     // Any other method is intentionally ignored — no reply, no error.
   }

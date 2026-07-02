@@ -19,14 +19,16 @@ app auth and the P2P swarm.
 
 - `ping.mjs` now also answers `{"method":"identity","params":{"seed":"<32-byte hex>"}}` →
   `{ publicKey, signature }` (lowercase hex).
-- `node derive.mjs [seedHex]` regenerates the golden fixture pinned in the parity test.
+- `bare derive.mjs [seedHex]` regenerates the golden fixture pinned in the parity test.
 
 **Frozen contract** (#142 mobile + viewrr-web reproduce byte-for-byte): keyPair seed = the first 32
 bytes of the BIP39-512 seed; `hypercore-crypto.keyPair(seed)`; `REGISTER_MESSAGE = "viewrr:register"`.
 Golden (all-zero seed) → pubkey `3b6a27bc…59da29`.
 
-Deps are pinned in `package.json`; run `npm i` in this dir before invoking. `node_modules/` is
-gitignored.
+Deps are pinned in `package.json`; run `bun install` in this dir before invoking. `node_modules/` is
+gitignored. The worklet is Bare-native: stdin/stdout go through `bare-pipe` (fd 0/1) and argv/exit
+come off Bare's built-in `Bare` global via the shared `stdio.mjs` shim (no `bare-process` dep), so
+run it under `bare`, not `node`.
 
 ## Slice 3 — announce (#121)
 
