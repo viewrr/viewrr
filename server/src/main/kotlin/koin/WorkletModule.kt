@@ -4,6 +4,7 @@ import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.koin.dsl.module
 import wtf.jobin.config.AppConfig
 import wtf.jobin.worklet.AnnounceRepository
+import wtf.jobin.worklet.ClearKeyDecryptor
 import wtf.jobin.worklet.ProcessSpawner
 import wtf.jobin.worklet.RealProcessSpawner
 import wtf.jobin.worklet.WorkletAnnouncer
@@ -29,4 +30,6 @@ val workletModule = module {
     // #121 slice 4: lookup-only capability. Lazy single, no loop, wired to no route yet — slice 5
     // is what consumes it. ponytail: exists so #124/#125 have a seam; default resolve path untouched.
     single { WorkletResolver(get<WorkletSupervisor>()::call) }
+    // #121 slice 5a: in-worklet clear-key decrypt. Capability only — no route consumes it yet.
+    single { ClearKeyDecryptor(get<WorkletSupervisor>()::call) }
 }

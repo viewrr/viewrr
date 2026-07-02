@@ -14,7 +14,15 @@
 import { deriveIdentity } from './identity.mjs'
 import { swarmTopic } from './topic.mjs'
 import { openStdio } from './stdio.mjs'
+import { decryptSegment } from './clearkey.mjs'
 import Hyperswarm from 'hyperswarm'
+
+// #121 slice 5a / #122: the content key + base nonce live ONLY here, set via setContentKey and
+// never emitted back over the seam. decryptSegment returns plaintext bytes; the key does not.
+// ponytail: setContentKey takes the raw key for now (bootstrap); opening a pubkey-sealed blob with
+// the worklet secretKey — so the key never travels in the clear even to here — is increment 5b.
+let contentKey = null
+let baseNonce = null
 
 // Bare-native stdio (P2P-ADR 0003): stdin/stdout are bare-pipe streams over fd 0/1, not Node's
 // `process` global (which Bare, the intended runtime, does not define). See stdio.mjs. Wire
@@ -99,6 +107,25 @@ stdin.on('data', (chunk) => {
       lookup(msg.params?.contentUuid, msg.params?.timeoutMs)
         .then((result) => stdout.write(JSON.stringify({ id: msg.id, result }) + '\n'))
         .catch((e) => stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n'))
+    } else if (msg.method === 'setContentKey') {
+      try {
+        contentKey = Buffer.from(msg.params?.keyHex ?? '', 'hex')
+        baseNonce = Buffer.from(msg.params?.baseNonceHex ?? '', 'hex')
+        if (contentKey.length !== 32 || baseNonce.length !== 16) throw new Error('bad key/nonce length')
+        stdout.write(JSON.stringify({ id: msg.id, result: { ok: true } }) + '\n') // key is NOT echoed
+      } catch (e) {
+        contentKey = null; baseNonce = null
+        stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
+      }
+    } else if (msg.method === 'decryptSegment') {
+      try {
+        if (contentKey === null) throw new Error('no content key set')
+        const plain = decryptSegment(contentKey, baseNonce, msg.params?.segIndex >>> 0,
+          Buffer.from(msg.params?.cipherHex ?? '', 'hex'))
+        stdout.write(JSON.stringify({ id: msg.id, result: { plaintextHex: plain.toString('hex') } }) + '\n')
+      } catch (e) {
+        stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
+      }
     }
     // Any other method is intentionally ignored — no reply, no error.
   }
