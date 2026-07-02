@@ -13,6 +13,7 @@
   "dependencies": {
     "bare-pipe": "^4.2.2",
     "hypercore-crypto": "^3.7.0",
-    "hyperswarm": "^4.17.0"
+    "hyperswarm": "^4.17.0",
+    "sodium-universal": "^5.0.1"
   }
 }

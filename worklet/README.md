@@ -47,3 +47,25 @@ a copy of; `WorkletAnnouncer` pushes them via the `announce` RPC on start + ever
 
 The live Hyperswarm join is **integration-only** — CI covers the topic golden (JS) plus the repo
 query and announcer loop (JVM, no network). Announce-only: serving bytes on a connection is slice 5.
+
+## Slice 5a — self-custody clear-key decrypt (#121 / #122)
+
+`clearkey.mjs` decrypts media segments IN the worklet. The content key never leaves — `setContentKey`
+loads it, `decryptSegment` returns plaintext only. A compromised Hub sees what's actively watched,
+never the key.
+
+**FROZEN contract** (ingest + #142/web reproduce byte-for-byte):
+- cipher = **XChaCha20-Poly1305-IETF** (`sodium-universal`, bare-native, authenticated) — a
+  deliberate upgrade from #122's sketched AES-128 (unauthenticated). 32-byte key, 16-byte tag.
+- `nonce(segIndex)` = `baseNonce[16] ‖ u32LE(segIndex) ‖ 0x00*4` (24 bytes).
+- GOLDEN: key `07*32`, baseNonce `00*16`, seg 0, `"segment-0-plaintext"` →
+  `430589af13434a1f3d4bd7497f4c833429a2b04431762d8b3ba50c1dc7d9a874c76ff4`.
+
+`ping.mjs` adds `setContentKey {keyHex, baseNonceHex}` (key held, never echoed) and
+`decryptSegment {segIndex, cipherHex}` → `{plaintextHex}`. Server `ClearKeyDecryptor` drives them
+(Koin lazy, **no route consumes it** — playback wiring is 5c). ponytail: `setContentKey` takes the
+raw key for now; opening a pubkey-**sealed** blob with the worklet secretKey (`crypto_box_seal`, so
+the key never travels in the clear) is increment 5b.
+
+Crypto golden is JS-verified (`sodium-universal` runs under node too); CI covers the JVM decryptor
+RPC shape. Actual segment transfer over the swarm connection is 5c.
