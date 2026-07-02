@@ -11,6 +11,7 @@
         "hypercore": "^11.33.5",
         "hypercore-crypto": "^3.7.0",
         "hyperswarm": "^4.17.0",
+        "sodium-universal": "^5.0.1",
       },
     },
   },
