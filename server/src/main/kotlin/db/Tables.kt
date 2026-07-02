@@ -142,7 +142,7 @@ object MediaCopies : UUIDTable("media_copies") {
 
 object WatchEvents : Table("watch_events") {
     val id = long("id").autoIncrement()
-    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val userId = reference("user_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
     val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
     val positionSecs = integer("position_secs")
     val eventType = varchar("event_type", 16)
@@ -152,7 +152,7 @@ object WatchEvents : Table("watch_events") {
 }
 
 object UserRecommendations : Table("user_recommendations") {
-    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val userId = reference("user_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
     val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
     val score = float("score")
     val rank = short("rank")
@@ -161,7 +161,7 @@ object UserRecommendations : Table("user_recommendations") {
 }
 
 object PartyRooms : UUIDTable("party_rooms") {
-    val ownerId = reference("owner_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val ownerId = reference("owner_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
     val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
     val joinCode = varchar("join_code", 8).uniqueIndex()
     val positionSecs = integer("position_secs").default(0)
@@ -173,14 +173,14 @@ object PartyRooms : UUIDTable("party_rooms") {
 
 object PartyMembers : Table("party_members") {
     val roomId = reference("room_id", PartyRooms.id, onDelete = ReferenceOption.CASCADE)
-    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val userId = reference("user_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
     val joinedAt = timestamp("joined_at")
     val leftAt = timestamp("left_at").nullable()
     override val primaryKey = PrimaryKey(roomId, userId)
 }
 
 object Downloads : UUIDTable("downloads") {
-    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    val userId = reference("user_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
     val mediaId = reference("media_id", MediaItems.id, onDelete = ReferenceOption.CASCADE)
     val deviceId = varchar("device_id", 128)
     val status = varchar("status", 16)
