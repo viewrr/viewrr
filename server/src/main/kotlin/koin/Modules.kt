@@ -4,8 +4,6 @@ import io.lettuce.core.RedisClient
 import io.lettuce.core.api.async.RedisAsyncCommands
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.koin.dsl.module
-import wtf.jobin.auth.AuthService
-import wtf.jobin.auth.PasswordHasher
 import wtf.jobin.auth.TokenService
 import wtf.jobin.auth.UserRepository
 import wtf.jobin.config.AppConfig
@@ -51,19 +49,22 @@ val redisModule = module {
     single { wtf.jobin.stremio.StremioKeys(get<RedisAsyncCommands<String, String>>()) }
 }
 
+// #120 (P2P-ADR 0001): the argon2 login (AuthService, PasswordHasher) is retired — identity is the
+// sole auth path. KEPT: TokenService mints the HS256 access/refresh tokens IdentityService hands
+// out after a verified challenge; UserRepository backs the admin user-management + parental-controls
+// routes (#49/#50), which are authorization features, not Keycloak. See needs-human note in the PR:
+// parental maxRating does not yet resolve for identity subjects (users-table-keyed).
 val authModule = module {
-    single { PasswordHasher() }
     single { TokenService(get<AppConfig>().auth, get()) }
     single { UserRepository(get()) }
-    single { AuthService(get(), get(), get()) }
 }
 
-// #120 (P2P-ADR 0001): self-custody identity. Reuses TokenService (session tokens) + Redis
-// (challenge nonces) — no new backend, alongside the Keycloak/user auth above.
+// #120 (P2P-ADR 0001): self-custody identity — the sole auth path. Reuses TokenService (session
+// tokens) + Redis (challenge nonces); admin is granted via the config pubkey allowlist.
 val identityModule = module {
     single { IdentityAccountRepository(get()) }
     single<ChallengeStore> { RedisChallengeStore(get<RedisAsyncCommands<String, String>>()) }
-    single { IdentityService(get(), get(), get()) }
+    single { IdentityService(get(), get(), get(), get<AppConfig>().auth.adminPublicKeys) }
 }
 
 val scannerModule = module {

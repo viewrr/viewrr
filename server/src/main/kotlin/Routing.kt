@@ -6,10 +6,10 @@ import wtf.jobin.config.AppConfig
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
-import wtf.jobin.auth.AuthService
 import wtf.jobin.auth.UserRepository
 import wtf.jobin.auth.adminUserRoutes
-import wtf.jobin.auth.authRoutes
+import wtf.jobin.auth.adminIdentityRoutes
+import wtf.jobin.identity.IdentityAccountRepository
 import wtf.jobin.identity.IdentityService
 import wtf.jobin.identity.identityRoutes
 import wtf.jobin.media.MediaSearchService
@@ -76,8 +76,8 @@ fun Application.configureRouting() {
         }
         return
     }
-    val auth by inject<AuthService>()
     val identity by inject<IdentityService>()
+    val identityAccounts by inject<IdentityAccountRepository>()
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
     val tmdb by inject<TmdbClient>()
@@ -102,9 +102,13 @@ fun Application.configureRouting() {
     val editorialIngest by inject<EditorialIngestService>()
     routing {
         get("/health") { call.respondText("ok") }
-        authRoutes(auth)
+        // #120: identity (publicKey challenge→verify) is the sole auth path; the argon2 /auth login
+        // and Keycloak/OIDC are retired. adminUserRoutes (#49) + parental controls (#50) are KEPT —
+        // they gate on the `admin` JWT claim, which the identity path now sets from the pubkey
+        // allowlist (viewrr.auth.adminPublicKeys).
         identityRoutes(identity)
         adminUserRoutes(users)
+        adminIdentityRoutes(identityAccounts) // #120: cap identity subjects (sole auth path post-#150)
         scannerRoutes(scanner, musicScanner)
         libraryRoutes(libraries, libraryWatcher, scanner, musicScanner)
         mediaRoutes(transcoder)

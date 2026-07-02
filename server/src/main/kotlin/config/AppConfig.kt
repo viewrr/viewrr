@@ -41,14 +41,11 @@ data class AppConfig(
         val jwtRealm: String,
         val accessTtlMinutes: Long,
         val refreshTtlDays: Long,
-        // Phase 20 (#113): when set, viewrr validates Keycloak RS256 tokens via JWKS.
-        // When null/blank, the legacy HS256 path stays live. See docs/runbooks/keycloak.md.
-        val oidcIssuer: String? = null,
-        val oidcJwksUrl: String? = null,
-        // #118: approved frontend client_ids. In OIDC mode, a token is accepted only if its `azp`
-        // (authorized party = the client it was minted for) is in this set. Empty = no restriction
-        // (back-compat). Set AUTH_ALLOWED_CLIENTS=viewrr-web,viewrr-mobile to lock the API to our apps.
-        val allowedClients: List<String> = emptyList(),
+        // #120 (P2P-ADR 0001): Ed25519 public keys (lowercase hex) that receive the admin claim
+        // when they authenticate via the identity challenge→verify path. This replaces the retired
+        // Keycloak realm-role / users.is_admin admin source: admin is now "you hold this key".
+        // Empty (default) = no admins. Set AUTH_ADMIN_PUBLIC_KEYS=<hex>,<hex> to grant admin.
+        val adminPublicKeys: Set<String> = emptySet(),
     )
 
     data class Media(
@@ -138,10 +135,8 @@ data class AppConfig(
                 jwtRealm = env.config.property("viewrr.auth.jwtRealm").getString(),
                 accessTtlMinutes = env.config.property("viewrr.auth.accessTtlMinutes").getString().toLong(),
                 refreshTtlDays = env.config.property("viewrr.auth.refreshTtlDays").getString().toLong(),
-                oidcIssuer = env.config.propertyOrNull("viewrr.auth.oidcIssuer")?.getString()?.takeIf { it.isNotBlank() },
-                oidcJwksUrl = env.config.propertyOrNull("viewrr.auth.oidcJwksUrl")?.getString()?.takeIf { it.isNotBlank() },
-                allowedClients = env.config.propertyOrNull("viewrr.auth.allowedClients")?.getString()
-                    ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
+                adminPublicKeys = env.config.propertyOrNull("viewrr.auth.adminPublicKeys")?.getString()
+                    ?.split(",")?.map { it.trim().lowercase() }?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
             ),
             media = Media(
                 ffprobePath = env.config.property("viewrr.media.ffprobePath").getString(),

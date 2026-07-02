@@ -30,49 +30,14 @@ fun noOpRedis(): RedisAsyncCommands<String, String> =
         arrayOf(RedisAsyncCommands::class.java),
     ) { _, _, _ -> null } as RedisAsyncCommands<String, String>
 
-// ponytail: never queried — every fake overrides its query methods, so this dormant handle only
-// satisfies UserRepository's constructor. explicitDialect skips connect's driver-dialect probe.
+// ponytail: never queried — FakeIdentityAccountRepository overrides its query methods, so this
+// dormant handle only satisfies the repository constructor. explicitDialect skips connect's
+// driver-dialect probe. (#120: the user/password fakes went with the retired argon2 login.)
 val dormantDb: R2dbcDatabase by lazy {
     R2dbcDatabase.connect(
         connectionFactory = ConnectionFactories.get("r2dbc:h2:mem:///viewrr_fake"),
         databaseConfig = R2dbcDatabaseConfig.Builder().also { it.explicitDialect = H2Dialect() },
     )
-}
-
-/** In-memory [UserRepository]; counts create() calls and mimics the real case-insensitive lookup. */
-class FakeUserRepository : UserRepository(dormantDb) {
-    private val byUsername = mutableMapOf<String, UserRow>()
-    var createCount = 0
-        private set
-
-    fun seed(row: UserRow) { byUsername[row.username.lowercase()] = row }
-
-    override suspend fun findByUsername(username: String): UserRow? = byUsername[username.lowercase()]
-
-    override suspend fun create(
-        username: String,
-        email: String,
-        passwordHash: String,
-        displayName: String?,
-    ): UserRow {
-        createCount++
-        val row = UserRow(UUID.randomUUID(), username, email, passwordHash, displayName, isAdmin = false, isActive = true, maxRating = null)
-        byUsername[username.lowercase()] = row
-        return row
-    }
-}
-
-/** Records verify() invocations (the timing-oracle guard) and lets each test fix the verdict. */
-class FakePasswordHasher(private val verifyResult: Boolean = true) : PasswordHasher() {
-    var verifyCount = 0
-        private set
-
-    override fun hash(plain: CharArray): String = "hash:" + String(plain)
-
-    override fun verify(hash: String, plain: CharArray): Boolean {
-        verifyCount++
-        return verifyResult
-    }
 }
 
 /** Issues sentinel tokens; issueRefresh is overridden so Redis is never touched. */

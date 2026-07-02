@@ -27,15 +27,17 @@ object Users : UUIDTable("users") {
     val updatedAt = timestamp("updated_at")
 }
 
-// #120 (P2P-ADR 0001): self-custody identity. An account is keyed by its Ed25519 public
-// key (lowercase hex, UNIQUE); the internal UUID id is what the reused JWT/session subject
-// carries. Added ALONGSIDE Users — Keycloak/argon2 retirement is a separate follow-up.
-// ponytail: minimal by design — no display name / roles here yet; they attach when the
-// client mnemonic flow and Keycloak cutover land.
+// #120 (P2P-ADR 0001): self-custody identity — the sole auth path (Keycloak/argon2 retired in
+// increment 2). An account is keyed by its Ed25519 public key (lowercase hex, UNIQUE); the internal
+// UUID id is what the reused JWT/session subject carries.
+// ponytail: this table carries no role column — admin is sourced from the config pubkey allowlist
+// (viewrr.auth.adminPublicKeys). Parental max_rating IS carried here (V19, #120 security fix) and is
+// resolved for identity subjects by rating.maxRatingFor; null = unrestricted, a set value is enforced.
 object IdentityAccounts : UUIDTable("identity_accounts") {
     val publicKey = text("public_key").uniqueIndex()
     val createdAt = timestamp("created_at")
     val displayName = text("display_name").nullable() // #120 inc 2: cosmetic petname, NOT unique
+    val maxRating = varchar("max_rating", 16).nullable() // V19 (#120): parental cap on the identity principal; null = unrestricted
 }
 
 // Phase 14 (#72): a Node owns raw bytes; Hub holds this row. mesh/client addresses

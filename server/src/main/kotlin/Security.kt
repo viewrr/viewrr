@@ -1,6 +1,5 @@
 package wtf.jobin
 
-import com.auth0.jwk.JwkProviderBuilder // #113: JWKS-backed RS256 verification for Keycloak OIDC
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import io.ktor.http.HttpStatusCode
@@ -36,56 +35,22 @@ fun Application.configureSecurity() {
         }
     }
 
-    // Phase 20 (#113): dual-mode JWT verification. When OIDC is configured
-    // (oidcIssuer + oidcJwksUrl both set) viewrr acts as an OIDC resource server and validates
-    // Keycloak-issued RS256 tokens via the realm JWKS. Otherwise the legacy HS256 path runs
-    // BYTE-IDENTICAL to before. The `admin` boolean claim is read by routes' assertAdmin() in
-    // both modes (Keycloak maps realm role -> admin claim, docs/runbooks/keycloak.md §5).
-    // Legacy /auth/login + argon2 removal is the post-cutover step (#115); not touched here.
-    // ponytail: RS256 activates only with OIDC config present; verifiable only vs a live Keycloak.
-    val oidcEnabled = !cfg.auth.oidcIssuer.isNullOrBlank() && !cfg.auth.oidcJwksUrl.isNullOrBlank()
-    val allowedClients = cfg.auth.allowedClients // #118: approved frontend client_ids (azp allowlist)
-    if (oidcEnabled) {
-        log.info("viewrr.auth.oidc* set — validating Keycloak RS256 tokens via JWKS (issuer=${cfg.auth.oidcIssuer}).")
-        if (allowedClients.isNotEmpty()) log.info("viewrr.auth.allowedClients set — azp allowlist active: $allowedClients")
-    }
-
+    // #120 (P2P-ADR 0001): single HS256 verifier. Keycloak/OIDC RS256 resource-server mode is
+    // retired — the publicKey challenge→verify identity (IdentityService) is the sole auth path,
+    // and it issues these HS256 access tokens via TokenService. The `admin` boolean claim is still
+    // read by routes' assertAdmin(); it is now set from the identity admin-key allowlist
+    // (viewrr.auth.adminPublicKeys) instead of a Keycloak realm role or the retired users table.
     authentication {
         jwt("auth-jwt") {
             realm = cfg.auth.jwtRealm
-            if (oidcEnabled) {
-                // #113: RS256 via Keycloak realm JWKS. JwkProvider is cached + rate-limited so
-                // we don't hit the realm cert endpoint on every request.
-                val jwkProvider = JwkProviderBuilder(java.net.URI(cfg.auth.oidcJwksUrl).toURL())
-                    .cached(10, 24, java.util.concurrent.TimeUnit.HOURS)
-                    .rateLimited(10, 1, java.util.concurrent.TimeUnit.MINUTES)
+            verifier(
+                JWT.require(Algorithm.HMAC256(cfg.auth.jwtSecret))
+                    .withIssuer(cfg.auth.jwtIssuer)
+                    .withAudience(cfg.auth.jwtAudience)
                     .build()
-                verifier(jwkProvider, cfg.auth.oidcIssuer!!) {
-                    // Keycloak access tokens are RS256; the audience may be the client id or
-                    // "account". We accept the configured legacy audience when present to keep
-                    // existing clients working, and otherwise rely on issuer + signature.
-                    if (cfg.auth.jwtAudience.isNotBlank()) withAudience(cfg.auth.jwtAudience)
-                    acceptLeeway(3)
-                }
-            } else {
-                // Legacy HS256 — unchanged from pre-#113.
-                verifier(
-                    JWT.require(Algorithm.HMAC256(cfg.auth.jwtSecret))
-                        .withIssuer(cfg.auth.jwtIssuer)
-                        .withAudience(cfg.auth.jwtAudience)
-                        .build()
-                )
-            }
+            )
             validate { credential ->
                 if (credential.payload.subject == null) return@validate null
-                // #118: in OIDC mode, only accept tokens minted for an approved frontend (azp allowlist).
-                // Even a valid user token issued to some other client_id is refused. Empty list = allow any
-                // (back-compat). Honest ceiling: a determined party can still build a client using our
-                // public client_id — this gates registered clients, not binary authenticity (see CONNECT docs).
-                if (oidcEnabled && allowedClients.isNotEmpty()) {
-                    val azp = credential.payload.getClaim("azp").asString()
-                    if (azp == null || azp !in allowedClients) return@validate null
-                }
                 JWTPrincipal(credential.payload)
             }
         }

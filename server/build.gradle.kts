@@ -65,14 +65,10 @@ dependencies {
     implementation("io.r2dbc:r2dbc-pool:1.0.2.RELEASE")
     implementation("org.jetbrains.exposed:exposed-java-time:1.3.0")
 
-    // Phase 3: Lettuce (Redis) + Argon2 (password hashing)
+    // Phase 3: Lettuce (Redis). #120: argon2-jvm removed with the retired password login;
+    // com.auth0:jwks-rsa removed with the retired Keycloak/OIDC RS256 resource-server mode.
+    // Ed25519 identity verification uses pure JDK crypto (see Ed25519Verifier), no new dep.
     implementation("io.lettuce:lettuce-core:6.5.1.RELEASE")
-    implementation("de.mkammerer:argon2-jvm:2.12")
-
-    // Phase 20 (#113): JWKS-backed RS256 verification for Keycloak OIDC (dual-mode; see Security.kt).
-    // Already on the classpath transitively via ktor-server-auth-jwt — pinned explicitly as the
-    // one new direct dep this issue justifies. ponytail: legacy HS256 stays the default.
-    implementation("com.auth0:jwks-rsa:0.24.0")
 
     // Phase 9: gRPC client to Python rec engine (kotlinx.rpc over grpc-netty)
     implementation(libs.kotlinx.rpc.grpc.client)
