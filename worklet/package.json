@@ -11,7 +11,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bare-os": "^3.9.3",
+    "bare-path": "^3.0.1",
     "bare-pipe": "^4.2.2",
+    "hypercore": "^11.33.5",
     "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.0",
     "sodium-universal": "^5.0.1"
