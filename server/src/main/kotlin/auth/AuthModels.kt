@@ -2,19 +2,11 @@ package wtf.jobin.auth
 
 import kotlinx.serialization.Serializable
 
-@Serializable
-data class RegisterRequest(
-    val username: String,
-    val email: String,
-    val password: String,
-    val displayName: String? = null,
-)
-
-@Serializable
-data class LoginRequest(val username: String, val password: String)
-
-@Serializable
-data class RefreshRequest(val refreshToken: String)
+// #120 (P2P-ADR 0001): the argon2 password-login DTOs (RegisterRequest / LoginRequest /
+// RefreshRequest) were retired with /auth and AuthService. KEPT here: TokenPair (the token-issuance
+// shape TokenService produces and IdentityService returns from challenge→verify) and the admin /
+// parental-controls DTOs (#49/#50) still used by AdminUserRoutes + UserRepository — those are
+// authorization features, NOT Keycloak, and survive the cutover.
 
 @Serializable
 data class TokenPair(val accessToken: String, val refreshToken: String)

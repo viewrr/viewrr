@@ -10,17 +10,21 @@ sealed class IdentityError(msg: String) : RuntimeException(msg) {
 }
 
 /**
- * #120 self-custody identity, foundation increment 1. Proves control of an Ed25519 key pair
- * WITHOUT Keycloak, then issues the app's existing JWT/refresh session (TokenService) keyed by
- * the account's internal UUID — so every downstream route works unchanged.
+ * #120 self-custody identity. Proves control of an Ed25519 key pair, then issues the app's
+ * HS256 JWT/refresh session (TokenService) keyed by the account's internal UUID — so every
+ * downstream route works unchanged. As of increment 2 this is the SOLE auth path: Keycloak/OIDC
+ * and the argon2 local login are retired.
  *
- * ponytail: identities are non-admin. There is no key->admin promotion path in this increment;
- * admin stays with the legacy user/Keycloak surface until the cutover follow-up.
+ * Admin: the `admin` JWT claim that gates admin routes is now sourced from [adminPublicKeys] — a
+ * config allowlist of Ed25519 keys (lowercase hex, viewrr.auth.adminPublicKeys). This replaces the
+ * retired Keycloak realm-role / users.is_admin source. There is no runtime promotion endpoint;
+ * admin is "you hold a key on the allowlist". Empty allowlist ⇒ no admins.
  */
 class IdentityService(
     private val accounts: IdentityAccountRepository,
     private val challenges: ChallengeStore,
     private val tokens: TokenService,
+    private val adminPublicKeys: Set<String> = emptySet(),
 ) {
     /** Register (or idempotently re-hit) an account. Returns whether the row was freshly created. */
     suspend fun register(req: RegisterIdentityRequest): Pair<AccountView, Boolean> {
@@ -55,8 +59,11 @@ class IdentityService(
         if (!challenges.consume(req.challenge)) throw IdentityError.InvalidChallenge()
         if (!Ed25519Verifier.verify(pk, req.signature, req.challenge.toByteArray())) throw IdentityError.BadSignature()
         val account = accounts.findByPublicKey(pk) ?: throw IdentityError.UnknownAccount()
+        // Admin is granted by holding a key on the config allowlist (see class doc). pk is already
+        // normalized (lowercase hex) by normalizeKey; the allowlist is normalized at config parse.
+        val isAdmin = pk in adminPublicKeys
         return TokenPair(
-            tokens.issueAccess(account.id, isAdmin = false),
+            tokens.issueAccess(account.id, isAdmin = isAdmin),
             tokens.issueRefresh(account.id),
         )
     }

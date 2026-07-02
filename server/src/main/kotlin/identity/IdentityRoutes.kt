@@ -6,8 +6,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 /**
- * #120: self-custody identity endpoints. Mounted ALONGSIDE /auth (Keycloak/argon2) — this adds
- * a key-based path, it does not remove the existing one.
+ * #120: self-custody identity endpoints — the SOLE auth path as of increment 2. Keycloak/OIDC and
+ * the argon2 /auth login are retired; register + challenge→verify is how clients authenticate.
  */
 fun Route.identityRoutes(svc: IdentityService) {
     route("/identity") {
