@@ -5,6 +5,7 @@
 //   identity {seed}            -> { publicKey, signature } hex           (slice 2, #121)
 //   announce {contentUuids}    -> { joined: <count> }                    (slice 3, #121)
 //   swarmStatus                -> { topics:[hex], peers:<n> }            (slice 3, debug)
+//   lookup {contentUuid,timeoutMs?} -> { peers:[hex] }                   (slice 4, #121)
 //
 // Reads `{"id":N,"method":..,"params":..}` lines on stdin, replies `{"id":N,"result":..}` or
 // `{"id":N,"error":..}`. Unknown methods are ignored (no reply), matching WorkletRpc's
@@ -30,6 +31,22 @@ function announce(contentUuids) {
     joinedTopics.add(topic)
   }
   return { joined: joinedTopics.size }
+}
+
+// #121 slice 4: lookup-only. Join the content's topic as a client, wait briefly, return whoever
+// connected. ponytail: peers are just the connections open within the window — a full DHT lookup is
+// best-effort; slice 5 does the actual byte transfer over these connections.
+async function lookup(contentUuid, timeoutMs = 2000) {
+  if (typeof contentUuid !== 'string') throw new Error('contentUuid must be a string')
+  if (swarm === null) swarm = new Hyperswarm()
+  const topic = swarmTopic(contentUuid)
+  if (!joinedTopics.has(topic)) {
+    swarm.join(Buffer.from(topic, 'hex'), { server: false, client: true })
+    joinedTopics.add(topic)
+  }
+  await new Promise((resolve) => setTimeout(resolve, timeoutMs))
+  const peers = [...swarm.connections].map((c) => c.remotePublicKey.toString('hex'))
+  return { peers }
 }
 
 let buffer = ''
@@ -72,6 +89,10 @@ process.stdin.on('data', (chunk) => {
     } else if (msg.method === 'swarmStatus') {
       const peers = swarm ? swarm.connections.size : 0
       process.stdout.write(JSON.stringify({ id: msg.id, result: { topics: [...joinedTopics], peers } }) + '\n')
+    } else if (msg.method === 'lookup') {
+      lookup(msg.params?.contentUuid, msg.params?.timeoutMs)
+        .then((result) => process.stdout.write(JSON.stringify({ id: msg.id, result }) + '\n'))
+        .catch((e) => process.stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n'))
     }
     // Any other method is intentionally ignored — no reply, no error.
   }
