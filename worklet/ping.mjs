@@ -1,14 +1,36 @@
 // #121 worklet entry — newline-delimited JSON-RPC over stdio (bare subprocess / node dev).
 //
 // Methods:
-//   ping                    -> "pong"                                   (slice 1, health)
-//   identity {seed}         -> { publicKey, signature } lowercase hex    (slice 2, #121)
+//   ping                       -> "pong"                                (slice 1, health)
+//   identity {seed}            -> { publicKey, signature } hex           (slice 2, #121)
+//   announce {contentUuids}    -> { joined: <count> }                    (slice 3, #121)
+//   swarmStatus                -> { topics:[hex], peers:<n> }            (slice 3, debug)
 //
 // Reads `{"id":N,"method":..,"params":..}` lines on stdin, replies `{"id":N,"result":..}` or
 // `{"id":N,"error":..}`. Unknown methods are ignored (no reply), matching WorkletRpc's
-// ignore-unknown-id path. Slice 2 pulls in hypercore-crypto (via identity.mjs), so this is no
-// longer import-free — it now requires `npm i` in worklet/ and a bare/node runtime with the dep.
+// ignore-unknown-id path. Slices 2-3 pull in hypercore-crypto + hyperswarm, so this is no longer
+// import-free — it needs `npm i` in worklet/ and a bare/node runtime with the deps.
 import { deriveIdentity } from './identity.mjs'
+import { swarmTopic } from './topic.mjs'
+import Hyperswarm from 'hyperswarm'
+
+// #121 slice 3: announce-only. Lazy single swarm; join each content topic as provider (server:true).
+// joinedTopics makes re-announce idempotent. ponytail: join is fire-and-forget advertisement —
+// serving actual bytes on a connection is slice 5, so we don't wire swarm 'connection' handlers yet.
+let swarm = null
+const joinedTopics = new Set()
+
+function announce(contentUuids) {
+  if (!Array.isArray(contentUuids)) throw new Error('contentUuids must be an array')
+  if (swarm === null) swarm = new Hyperswarm()
+  for (const uuid of contentUuids) {
+    const topic = swarmTopic(uuid)
+    if (joinedTopics.has(topic)) continue
+    swarm.join(Buffer.from(topic, 'hex'), { server: true, client: false })
+    joinedTopics.add(topic)
+  }
+  return { joined: joinedTopics.size }
+}
 
 let buffer = ''
 
@@ -40,6 +62,16 @@ process.stdin.on('data', (chunk) => {
       } catch (e) {
         process.stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
       }
+    } else if (msg.method === 'announce') {
+      try {
+        const result = announce(msg.params?.contentUuids)
+        process.stdout.write(JSON.stringify({ id: msg.id, result }) + '\n')
+      } catch (e) {
+        process.stdout.write(JSON.stringify({ id: msg.id, error: String(e?.message ?? e) }) + '\n')
+      }
+    } else if (msg.method === 'swarmStatus') {
+      const peers = swarm ? swarm.connections.size : 0
+      process.stdout.write(JSON.stringify({ id: msg.id, result: { topics: [...joinedTopics], peers } }) + '\n')
     }
     // Any other method is intentionally ignored — no reply, no error.
   }

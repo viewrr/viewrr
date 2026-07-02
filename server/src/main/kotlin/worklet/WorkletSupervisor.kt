@@ -6,6 +6,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import org.slf4j.LoggerFactory
@@ -102,6 +103,19 @@ class WorkletSupervisor(
             (result as? JsonPrimitive)?.contentOrNull == "pong"
         } catch (e: WorkletRpcException) {
             false
+        }
+    }
+
+    /**
+     * Generic RPC passthrough for higher-level features (e.g. #121 slice 3 `announce`). Returns
+     * null when the worklet is down or disabled, so callers degrade quietly rather than throw.
+     */
+    suspend fun call(method: String, params: JsonElement? = null): JsonElement? {
+        val rpc = rpcRef.get() ?: return null
+        return try {
+            rpc.call(method, params, timeoutMs = config.pingTimeoutMs)
+        } catch (e: WorkletRpcException) {
+            null
         }
     }
 
