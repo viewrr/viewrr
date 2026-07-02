@@ -8,7 +8,9 @@ import org.jetbrains.exposed.v1.javatime.timestamp
 // Mirrors V6__collections.sql. Flyway owns the DDL; these only describe it for Exposed.
 
 object Collections : UUIDTable("collections") {
-    val ownerId = reference("owner_id", Users.id, onDelete = ReferenceOption.CASCADE)
+    // #120 B1: principal unified onto identity_accounts (was Users.id). owner_id carries the
+    // auth subject id (JWT sub = identity_accounts.id), same as the other user-scoped FKs.
+    val ownerId = reference("owner_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
     val name = varchar("name", 255)
     val createdAt = timestamp("created_at")
 }
