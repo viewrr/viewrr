@@ -20,6 +20,7 @@ data class AppConfig(
     val cluster: Cluster,
     val agent: Agent,
     val acquisition: Acquisition, // Phase 17 (#86..#93)
+    val worklet: Worklet,         // #121 slice 1 (P2P-ADR 0003) — DEFAULT-OFF
     val env: String,
     val publicBaseUrl: String,
 ) {
@@ -103,6 +104,18 @@ data class AppConfig(
         val booksDir: String,
         val torrentRpcUrl: String?,
         val torrentRpcToken: String?,
+    )
+
+    // #121 slice 1 (P2P-ADR 0003): worklet subprocess seam. DEFAULT-OFF — enabled=false means the
+    // supervisor spawns nothing and ping() returns false, so boot is byte-identical to today. This
+    // slice is pure control-plane plumbing; no P2P/Hyper*/swarm/identity logic rides here yet.
+    // command is space-split from WORKLET_COMMAND (e.g. "bare worklet/ping.mjs").
+    data class Worklet(
+        val enabled: Boolean = false,
+        val command: List<String>,
+        val pingTimeoutMs: Long,
+        val maxRestartAttempts: Int,
+        val backoffBaseMs: Long,
     )
 
     companion object {
@@ -192,6 +205,20 @@ data class AppConfig(
                     ?.getString()?.takeIf { it.isNotBlank() },
                 torrentRpcToken = env.config.propertyOrNull("viewrr.acquisition.torrentRpcToken")
                     ?.getString()?.takeIf { it.isNotBlank() },
+            ),
+            worklet = Worklet(
+                // #121 slice 1: DEFAULT-OFF. When enabled=false the supervisor never spawns, so a
+                // fresh env with zero WORKLET_* keys parses cleanly and changes nothing at runtime.
+                enabled = env.config.propertyOrNull("viewrr.worklet.enabled")
+                    ?.getString()?.toBooleanStrictOrNull() ?: false,
+                command = env.config.propertyOrNull("viewrr.worklet.command")?.getString()
+                    ?.split(" ")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
+                pingTimeoutMs = env.config.propertyOrNull("viewrr.worklet.pingTimeoutMs")
+                    ?.getString()?.toLong() ?: 2_000L,
+                maxRestartAttempts = env.config.propertyOrNull("viewrr.worklet.maxRestartAttempts")
+                    ?.getString()?.toInt() ?: 5,
+                backoffBaseMs = env.config.propertyOrNull("viewrr.worklet.backoffBaseMs")
+                    ?.getString()?.toLong() ?: 500L,
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()
