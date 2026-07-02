@@ -8,6 +8,7 @@ import org.koin.logger.slf4jLogger
 import wtf.jobin.config.AppConfig
 import wtf.jobin.config.Role
 import wtf.jobin.config.assertProdSafe
+import wtf.jobin.worklet.WorkletAnnouncer
 import wtf.jobin.worklet.WorkletSupervisor
 import wtf.jobin.koin.authModule
 import wtf.jobin.koin.collectionModule
@@ -61,5 +62,7 @@ fun Application.configureKoin() {
     if (appConfig.role != Role.AGENT && appConfig.worklet.enabled) {
         // 'this' Application is the CoroutineScope whose lifetime owns the subprocess (like #86).
         getKoin().get<WorkletSupervisor>().start(this)
+        // #121 slice 3: announce local content once started; loop shares the Application scope.
+        getKoin().get<WorkletAnnouncer>().start(this)
     }
 }

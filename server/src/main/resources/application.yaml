@@ -86,3 +86,4 @@ viewrr:
     pingTimeoutMs: "$WORKLET_PING_TIMEOUT_MS:2000"
     maxRestartAttempts: "$WORKLET_MAX_RESTART_ATTEMPTS:5"
     backoffBaseMs: "$WORKLET_BACKOFF_BASE_MS:500"
+    announceIntervalMs: "$WORKLET_ANNOUNCE_INTERVAL_MS:60000"  # #121 slice 3: local-content re-announce period

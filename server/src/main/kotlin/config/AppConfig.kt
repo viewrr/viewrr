@@ -116,6 +116,7 @@ data class AppConfig(
         val pingTimeoutMs: Long,
         val maxRestartAttempts: Int,
         val backoffBaseMs: Long,
+        val announceIntervalMs: Long = 60_000, // #121 slice 3: how often to re-announce local content
     )
 
     companion object {
@@ -219,6 +220,8 @@ data class AppConfig(
                     ?.getString()?.toInt() ?: 5,
                 backoffBaseMs = env.config.propertyOrNull("viewrr.worklet.backoffBaseMs")
                     ?.getString()?.toLong() ?: 500L,
+                announceIntervalMs = env.config.propertyOrNull("viewrr.worklet.announceIntervalMs")
+                    ?.getString()?.toLong() ?: 60_000L,
             ),
             env = env.config.propertyOrNull("viewrr.env")?.getString() ?: "dev",
             publicBaseUrl = env.config.propertyOrNull("viewrr.publicBaseUrl")?.getString()
