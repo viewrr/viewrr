@@ -8,6 +8,8 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 import wtf.jobin.auth.UserRepository
 import wtf.jobin.auth.adminUserRoutes
+import wtf.jobin.auth.adminIdentityRoutes
+import wtf.jobin.identity.IdentityAccountRepository
 import wtf.jobin.identity.IdentityService
 import wtf.jobin.identity.identityRoutes
 import wtf.jobin.media.MediaSearchService
@@ -75,6 +77,7 @@ fun Application.configureRouting() {
         return
     }
     val identity by inject<IdentityService>()
+    val identityAccounts by inject<IdentityAccountRepository>()
     val users by inject<UserRepository>()
     val scanner by inject<MediaScanner>()
     val tmdb by inject<TmdbClient>()
@@ -105,6 +108,7 @@ fun Application.configureRouting() {
         // allowlist (viewrr.auth.adminPublicKeys).
         identityRoutes(identity)
         adminUserRoutes(users)
+        adminIdentityRoutes(identityAccounts) // #120: cap identity subjects (sole auth path post-#150)
         scannerRoutes(scanner, musicScanner)
         libraryRoutes(libraries, libraryWatcher, scanner, musicScanner)
         mediaRoutes(transcoder)

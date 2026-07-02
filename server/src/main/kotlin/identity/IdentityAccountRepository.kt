@@ -28,6 +28,17 @@ open class IdentityAccountRepository(private val db: R2dbcDatabase) {
         IdentityAccountRow(id.value, publicKeyHex, displayName)
     }
 
+    /**
+     * #120 security fix: set the parental cap on an identity account (the value rating.maxRatingFor
+     * now enforces). Caller normalizes/validates via rating.normalizeRating/isValidRating. null clears
+     * the cap (unrestricted). Returns false when no such account exists.
+     */
+    open suspend fun setMaxRating(id: UUID, maxRating: String?): Boolean = suspendTransaction(db) {
+        IdentityAccounts.update({ IdentityAccounts.id eq id }) {
+            it[IdentityAccounts.maxRating] = maxRating
+        } > 0
+    }
+
     private fun ResultRow.toRow() = IdentityAccountRow(
         id = this[IdentityAccounts.id].value,
         publicKey = this[IdentityAccounts.publicKey],
