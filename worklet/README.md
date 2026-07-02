@@ -86,3 +86,32 @@ with that user's secret key. Replaces 5a's raw `setContentKey`.
 Now neither the content key nor the identity secret key ever crosses the RPC seam. ponytail: the
 seed still arrives over the seam in `loadIdentity` (bootstrap); generating it in-worklet so even the
 seed never crosses is the identity-custody increment. Segment transfer over the swarm is 5c.
+## Increment 2 — Hypercore append/replicate + Hyperswarm join (#121)
+
+The Hyper* data path itself: an append-only [Hypercore](https://github.com/holepunchto/hypercore)
+(v11) log that replicates. Exposed over the SAME seam via a new entry, `hyperlet.mjs` (kept separate
+so the announce worklet `ping.mjs` is untouched); its dispatch reuses the new `serveRpc(handlers)`
+helper in `stdio.mjs` (async-capable, unlike ping.mjs's hand-rolled loop). Core logic lives in
+`core.mjs`, keyed by an integer handle:
+
+- `coreOpen {keyHex?, storageDir?}` → `{handle, keyHex, writable, length}` — no key = a fresh writable
+  core; a key = a read-only replica of it.
+- `append {handle, data}` → `{length}` (one utf-8 string = one block).
+- `get {handle, seq}` → `{seq, data}` — on a replica this **awaits replication** of the block.
+- `length {handle}` → `{length}`.
+- `swarmJoin {handle, topicHex}` → joins the topic on a lazy Hyperswarm and replicates the core with
+  every discovered peer (writer = server, replica = client).
+
+Storage is a fresh per-core temp dir (`bare-os` tmpdir): Hypercore 11 dropped `random-access-memory`,
+its rocksdb backend needs a path, and `rocksdb-native` runs under bare. Durable/on-disk config is a
+later concern — this increment only proves "append replicates".
+
+**Proof.** `hyper-selftest.mjs` is the deterministic, no-network proof: two cores replicate over a
+DIRECT in-memory duplex (`replicateDirect`), writer appends, replica reads the same bytes back, exit
+0/non-zero (self-timeout so it can't hang). `server/.../worklet/WorkletHypercoreSmokeTest.kt` runs it
+as the PRIMARY assertion (gated on bare + `node_modules`), plus a SECONDARY live-swarm smoke over two
+`hyperlet.mjs` subprocesses that skips-with-reason when the DHT is unreachable. Kotlin callers get a
+typed surface via `WorkletHypercore.kt` (new file — touches no db/write paths).
+
+**Deferred to increment 3:** Hyperbee (ordered KV), Hyperdrive (files), Autobase (multi-writer) — the
+structured stores layered on top of a plain core.
