@@ -1,0 +1,12 @@
+-- #120 security fix (fail-open close): parental max_rating on the identity principal.
+--
+-- After #150, an authenticated subject's id is an identity_accounts.id (publicKey identity is the
+-- SOLE auth path). rating.maxRatingFor queried only the users table, so an identity subject never
+-- matched -> null -> unrestricted: a parental cap set on an account was silently ignored across
+-- every content route (Home/MediaList/Playback/Search/Stream/Series/Stremio). Carry the cap here so
+-- it resolves for identity subjects.
+--
+-- Semantics: NULL = unrestricted (the account owner is an adult by default); a set value (G..NC-17)
+-- is ENFORCED. VARCHAR(16) mirrors users.max_rating (V7) so the existing rating ladder + DTOs are
+-- reused as-is.
+ALTER TABLE identity_accounts ADD COLUMN max_rating VARCHAR(16);

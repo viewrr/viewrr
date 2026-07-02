@@ -8,6 +8,7 @@ import io.ktor.server.plugins.NotFoundException
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import wtf.jobin.identity.IdentityAccountRepository
 import java.util.UUID
 
 // 404 over 403 — don't leak admin surface.
@@ -51,6 +52,25 @@ fun Route.adminUserRoutes(users: UserRepository) {
             val self = UUID.fromString(call.principal<JWTPrincipal>()!!.subject!!)
             if (id == self) throw IllegalArgumentException("cannot delete yourself")
             if (!users.delete(id)) throw NotFoundException()
+            call.respond(HttpStatusCode.NoContent)
+        }
+    }
+}
+
+/**
+ * #120 security fix: after #150 the JWT subject is an identity_accounts.id, so the users-keyed
+ * /admin/users/{id}/max-rating above cannot cap an identity account. This sibling sets the cap on the
+ * identity principal itself — the value rating.maxRatingFor now enforces. Same admin gate + rating
+ * validation as the users route; reuses SetMaxRatingRequest. 204 on success, 404 if no such account.
+ */
+fun Route.adminIdentityRoutes(accounts: IdentityAccountRepository) {
+    authenticate("auth-jwt") {
+        post("/admin/identities/{id}/max-rating") {
+            call.assertAdmin()
+            val id = UUID.fromString(call.parameters["id"]!!)
+            val req = call.receive<SetMaxRatingRequest>()
+            if (!wtf.jobin.rating.isValidRating(req.maxRating)) throw IllegalArgumentException("invalid rating")
+            if (!accounts.setMaxRating(id, wtf.jobin.rating.normalizeRating(req.maxRating))) throw NotFoundException()
             call.respond(HttpStatusCode.NoContent)
         }
     }
