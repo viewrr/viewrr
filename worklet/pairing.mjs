@@ -24,6 +24,7 @@
 import Hyperswarm from 'hyperswarm'
 import crypto from 'hypercore-crypto'
 import { pairingTopic, privateTopic } from './topic.mjs'
+import { encodeVaultLink, decodeVaultLink } from './vaultlink-qr.mjs'
 
 const PAIRING_SECRET_BYTES = 32
 
@@ -80,10 +81,28 @@ export function deriveTopic(params) {
 }
 
 /**
- * pairBegin({ vaultHex }) -> { pairingSecretHex, topicHex }. Host side. Mints a fresh pairing secret,
- * joins hash(secret) as server, and arms a one-shot handler that ships `vaultHex` to the first peer.
- * Resolves IMMEDIATELY (before any peer arrives) so the caller can render the QR; delivery completes
- * asynchronously and is awaited by pairFinish().
+ * vaultLinkEncode({ pairingSecretHex }) -> { qr }. Pure: wrap a pairing secret in the frozen,
+ * integrity-checked vault-link URI the trusted device renders as a QR. No swarm side effects.
+ */
+export function vaultLinkEncode(params) {
+  return { qr: encodeVaultLink(String(params?.pairingSecretHex ?? '')) }
+}
+
+/**
+ * vaultLinkDecode({ qr }) -> { pairingSecretHex, topicHex }. Pure: parse+verify a scanned vault-link
+ * URI, THROWING on wrong scheme/version, bad length, or checksum mismatch. topicHex is ready to join.
+ */
+export function vaultLinkDecode(params) {
+  return decodeVaultLink(String(params?.qr ?? ''))
+}
+
+/**
+ * pairBegin({ vaultHex }) -> { pairingSecretHex, topicHex, qr }. Host side. Mints a fresh pairing
+ * secret, joins hash(secret) as server, and arms a one-shot handler that ships `vaultHex` to the first
+ * peer. Resolves IMMEDIATELY (before any peer arrives) so the caller can render the QR; delivery
+ * completes asynchronously and is awaited by pairFinish(). `qr` is the frozen vault-link URI to encode
+ * as the QR — pass it straight to pairJoin on the new device; `pairingSecretHex` is kept for callers
+ * that render their own QR payload.
  */
 export async function pairBegin(params) {
   assertNoSession()
@@ -108,7 +127,8 @@ export async function pairBegin(params) {
   })
 
   await swarm.join(Buffer.from(topicHex, 'hex'), { server: true, client: false }).flushed()
-  return { pairingSecretHex: pairingSecret.toString('hex'), topicHex }
+  const pairingSecretHex = pairingSecret.toString('hex')
+  return { pairingSecretHex, topicHex, qr: encodeVaultLink(pairingSecretHex) }
 }
 
 /**
@@ -128,14 +148,20 @@ export async function pairFinish() {
 }
 
 /**
- * pairJoin({ pairingSecretHex }) -> { vaultHex }. New-device side. Recomputes the topic from the QR
+ * pairJoin({ pairingSecretHex } | { qr }) -> { vaultHex }. New-device side. Accepts EITHER a raw
+ * pairing secret OR a scanned vault-link `qr` URI (which is decoded+integrity-checked first, so a
+ * corrupt scan fails here rather than as a silent no-peer timeout). Recomputes the topic from the
  * secret, joins as client, reads the vault off the Noise channel, then TEARS DOWN. A timeout on the
  * caller's side (peer never showed) leaves teardown to the caller via pairAbort(), so this resolves
  * ONLY on a real transfer.
  */
 export async function pairJoin(params) {
   assertNoSession()
-  const pairingSecret = Buffer.from(String(params.pairingSecretHex), 'hex')
+  // A scanned QR (`qr`) is decoded+verified up front; otherwise take the raw hex secret.
+  const secretHex = params?.qr != null
+    ? decodeVaultLink(String(params.qr)).pairingSecretHex
+    : String(params?.pairingSecretHex)
+  const pairingSecret = Buffer.from(secretHex, 'hex')
   if (pairingSecret.length !== PAIRING_SECRET_BYTES) {
     throw new Error(`pairing secret must be ${PAIRING_SECRET_BYTES} bytes, got ${pairingSecret.length}`)
   }

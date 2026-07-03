@@ -3,19 +3,31 @@
 // stays untouched. Same wire (Kotlin WorkletRpc speaks it); dispatch is the shared serveRpc loop.
 //
 //   ping                                       -> "pong"                     (health)
-//   deriveTopic { secretHex, label }           -> { topicHex }              (deterministic; no swarm)
-//   pairBegin   { vaultHex }                    -> { pairingSecretHex, topicHex }   (host)
-//   pairFinish                                  -> { delivered }             (host; awaits + teardown)
-//   pairJoin    { pairingSecretHex }            -> { vaultHex }              (new device; + teardown)
-//   pairAbort                                   -> { aborted }              (force teardown)
+//   deriveTopic     { secretHex, label }       -> { topicHex }              (deterministic; no swarm)
+//   vaultLinkEncode { pairingSecretHex }       -> { qr }                    (pure; QR wire format)
+//   vaultLinkDecode { qr }                     -> { pairingSecretHex, topicHex }  (pure; verified)
+//   pairBegin       { vaultHex }               -> { pairingSecretHex, topicHex, qr }  (host)
+//   pairFinish                                 -> { delivered }             (host; awaits + teardown)
+//   pairJoin        { pairingSecretHex | qr }  -> { vaultHex }              (new device; + teardown)
+//   pairAbort                                  -> { aborted }              (force teardown)
 //
 // Run under `bare` (bare-native stdio); needs `bun install` in worklet/ for the Hyper*/sodium deps.
 import { serveRpc } from './stdio.mjs'
-import { deriveTopic, pairBegin, pairFinish, pairJoin, pairAbort } from './pairing.mjs'
+import {
+  deriveTopic,
+  vaultLinkEncode,
+  vaultLinkDecode,
+  pairBegin,
+  pairFinish,
+  pairJoin,
+  pairAbort,
+} from './pairing.mjs'
 
 serveRpc({
   ping: () => 'pong',
   deriveTopic,
+  vaultLinkEncode,
+  vaultLinkDecode,
   pairBegin,
   pairFinish,
   pairJoin,
