@@ -1,0 +1,27 @@
+# Keep the Docker build context small and reproducible (#118).
+.git
+.gitignore
+.github
+.idea
+*.iml
+.gradle
+.kotlin
+build
+*/build
+.serena
+.agents
+.mcp_data
+.wrangler
+.claude
+.env
+.env.local
+*.log
+worklet/node_modules
+graphify-out
+mock
+bruno
+Plans
+docs
+README.md
+CONTEXT.md
+viewrr-handoff.md
