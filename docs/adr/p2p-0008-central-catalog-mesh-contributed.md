@@ -43,3 +43,24 @@ is the historically seized layer (indexes lose; protocols don't).
   the server never learns who holds what. New catalog rows are **validated against
   TMDB** to prevent poisoning. Peer *selection* is client-side by Plus Code proximity +
   uplink speed (`04`). No central who-watched-what DB exists.
+
+## Backups (catalogue + control-plane DB)
+
+Patroni (`p2p-0015`) provides **HA, not DR** — it survives a node loss, not a dropped
+table, corruption, or a bad migration. The Postgres cluster (catalogue metadata +
+entitlements/payments) needs scheduled **point-in-time recovery** backups independent of
+replication.
+
+- **Use PHYSICAL backup (Full + Incremental + WAL, PITR), never rely on logical dump for
+  the ParadeDB parts.** A physical file-level backup copies the whole cluster incl. the
+  `bm25` index files — extension-agnostic. A logical `pg_dump` emits
+  `CREATE INDEX … USING bm25`, which needs ParadeDB installed + version-matched on restore
+  and can dump fragile; only viable with a reindex step. Indexes are rebuildable from data,
+  so logical + reindex is a fallback, not the primary.
+- **Restore verification must run against the ParadeDB image**, not stock Postgres — a
+  physical restore of this cluster needs the extension `.so` present to start.
+- **Destination = NAS** (already the ciphertext backup tier, `p2p-0011`) **or R2** —
+  self-hosted, neutral infra (`p2p-0005`). Data is ~MB, so backups are cheap and fast.
+- **Tool:** any physical-PITR tool works — `databasus` (tested-restore + UI, easier solo
+  ops) or `pgBackRest` / `wal-g` (more battle-tested for the payments DB). Both do physical
+  PITR; pick on operability vs proven-ness. Ops-layer choice, not architecture.
