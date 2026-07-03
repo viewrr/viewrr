@@ -20,5 +20,7 @@
 | [p2p-0011](p2p-0011-multi-device-storage-pool.md) | Storage pool + encrypted backup | #127 |
 | [p2p-0012](p2p-0012-no-device-fingerprinting.md) | No device fingerprinting | #129 |
 | [p2p-0013](p2p-0013-account-registry-ravencloak-directory-not-gate.md) | Account registry (Ravencloak) directory, not gate | — |
+| [p2p-0014](p2p-0014-dht-ingress-and-overlay.md) | DHT bootstrap on public VPS; overlay internal; media P2P-direct | — |
+| [p2p-0015](p2p-0015-vps-sole-infra-nas-demoted.md) | VPS = sole server infra; NAS demoted to peer + Backup Tier | — |
 
 Glossary: [CONTEXT-p2p.md](CONTEXT-p2p.md)
