@@ -7,6 +7,10 @@ private const val UNSAFE_JWT_SECRET = "change-me-dev-only"
 private const val UNSAFE_DB_PASSWORD = "postgres"
 private const val LOCALHOST_PREFIX = "localhost:"
 
+/** Prod is the canonical env value (`.env.schema` enum `dev|prod`). Pure so the guard is testable. */
+internal fun prodBootFatal(env: String, hasUnsafeDefaults: Boolean): Boolean =
+    env == "prod" && hasUnsafeDefaults
+
 /**
  * Boot-time safety check. In production mode, exits the process if any of the
  * three known dev-only fallbacks (jwt secret, db password, localhost CORS) are
@@ -27,8 +31,7 @@ fun assertProdSafe(cfg: AppConfig) {
         issues += "viewrr.cors.allowedHosts contains localhost entries $localhostHosts — set non-localhost origins"
     }
 
-    if (cfg.env == "production") {
-        if (issues.isEmpty()) return
+    if (prodBootFatal(cfg.env, issues.isNotEmpty())) {
         log.error("FATAL: refusing to boot in production with unsafe defaults:")
         issues.forEach { log.error("  - $it") }
         exitProcess(1)
