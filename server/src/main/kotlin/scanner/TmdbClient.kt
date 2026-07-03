@@ -6,6 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+import wtf.jobin.db.ContentUuid
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -71,6 +72,38 @@ class TmdbClient(
             }
             parse(res.body())
         }.onFailure { log.warn("TMDb lookup failed for '{}'", title, it) }.getOrNull()
+    }
+
+    /**
+     * #124 (P2P-ADR 0008) anti-poison existence probe: does this TMDB id exist? Backs
+     * [wtf.jobin.availability.TmdbExistence] so a mesh-contributed catalog row for a fabricated
+     * title can be refused. Tri-state, matching that seam's contract:
+     *   - `true`  -> TMDB returned the title (HTTP 200),
+     *   - `false` -> TMDB has no such id (HTTP 404 — poison),
+     *   - `null`  -> unknown (disabled key, rate-limit, or any transient error): DO NOT reject on it.
+     * A HEAD-style GET of `/movie/{id}` or `/tv/{id}`; only the status code decides (see
+     * [existenceFromStatus]), so no body parsing and no image handling is involved.
+     */
+    suspend fun titleExists(tmdbId: Int, kind: ContentUuid.Kind): Boolean? {
+        if (!enabled || tmdbId <= 0) return null
+        val path = if (kind == ContentUuid.Kind.TV) "tv" else "movie"
+        val url = "https://api.themoviedb.org/3/$path/$tmdbId?api_key=$apiKey"
+        return runCatching {
+            val res = withContext(Dispatchers.IO) {
+                http.send(
+                    HttpRequest.newBuilder(URI.create(url)).GET().build(),
+                    HttpResponse.BodyHandlers.discarding(),
+                )
+            }
+            existenceFromStatus(res.statusCode())
+        }.onFailure { log.warn("TMDb existence probe failed for {}:{}", path, tmdbId, it) }.getOrNull()
+    }
+
+    /** Pure: map a TMDb detail-endpoint HTTP status to the tri-state existence verdict. */
+    fun existenceFromStatus(status: Int): Boolean? = when (status) {
+        200 -> true
+        404 -> false
+        else -> null // 401/429/5xx: unknown, never a poison verdict
     }
 
     /** Pure: first result of a TMDb search-movie JSON body -> [TmdbMeta], or null if no results. */
