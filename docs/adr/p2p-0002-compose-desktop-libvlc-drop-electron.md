@@ -1,6 +1,6 @@
-# 0002 — Desktop client is Compose Multiplatform + libVLC, not Electron
+# 0002 — Desktop client is Compose Multiplatform + libmpv, not Electron
 
-**Status:** Accepted (2026-07-01)
+**Status:** Accepted (2026-07-01) · **Amended 2026-07-03** — player is **libmpv**, not libVLC/vlcj (see Decision #2). Filename kept for link stability.
 
 ## Context
 
@@ -15,9 +15,12 @@ H.264 fallback (AV2 deferred until hardware decode lands, ~2026-2027).
 
 1. **Desktop shell = Compose Multiplatform (JVM)** — shares the KMP codebase with
    Android/iOS. Electron is dropped.
-2. **Video player = libVLC via vlcj** — Compose Desktop has no built-in player;
-   libVLC is codec-agnostic (AV1 today, AV2 free once VLC ships it) and avoids wiring
-   a JVM decode pipeline.
+2. **Video player = libmpv** (amended 2026-07-03) — Compose Desktop has no built-in
+   player; **libmpv is already the player in this repo** (the existing libmpv/AVPlayer
+   path, #100). Reusing it keeps **one player per platform, no third** (#130, #163):
+   macOS/iOS → AVPlayer, Android → Media3/ExoPlayer, Web/TV → hls.js, Desktop (JVM) →
+   libmpv. libmpv is codec-agnostic (AV1 today, AV2 once it ships). The originally-named
+   libVLC/vlcj is rejected — it would add a third player stack for no gain.
 3. **Codec = AV1 primary + H.264 fallback** for MVP. AV2 is a later config-add rung.
 4. A **segment-decrypt shim** is required regardless of player: the worklet decrypts
    each clear-key segment in memory and feeds the player, because the content key is
@@ -26,7 +29,7 @@ H.264 fallback (AV2 deferred until hardware decode lands, ~2026-2027).
 ## Consequences
 
 - **Good:** One KMP codebase for Android + iOS + Desktop. Less code than a separate
-  Electron app. libVLC handles all codecs including future AV2.
+  Electron app. libmpv handles all codecs including future AV2.
 - **Good:** AV1 already delivers the "less data" goal without AV2's immaturity.
 - **Bad / cascade:** Electron-specific plumbing must be re-homed on JVM —
   - Biometric/hardware-key unlock (Touch ID / Windows Hello / YubiKey) needs JVM
