@@ -205,3 +205,33 @@ object MusicTracks : UUIDTable("music_tracks") {
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 }
+
+// #127 (P2P-ADR 0011): user-scoped multi-device storage pool. Mirrors V21.
+// A device (node) joins its user's (identity) pool by declaring its free space
+// and the >=20% slice it dedicates. One row per (owner, node); the >=20% floor
+// and the RF>=2 private-original invariant are enforced in StoragePoolRepository.
+object StoragePoolMembers : UUIDTable("storage_pool_members") {
+    val ownerId = reference("owner_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
+    val nodeId = reference("node_id", Nodes.id, onDelete = ReferenceOption.CASCADE)
+    val freeSpaceBytes = long("free_space_bytes")
+    val contributedBytes = long("contributed_bytes")
+    val contributionPct = short("contribution_pct").default(20)
+    val joinedAt = timestamp("joined_at")
+    val updatedAt = timestamp("updated_at")
+
+    init { uniqueIndex(ownerId, nodeId) } // a device joins a given user's pool once
+}
+
+// #127 (P2P-ADR 0011): per-content replica placement across pooled devices.
+// replicationFactor(content) = count(distinct nodeId). content_key is a free-form
+// content address so private-vault originals need not be catalog Titles.
+object PoolContentReplicas : UUIDTable("pool_content_replicas") {
+    val ownerId = reference("owner_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
+    val contentKey = text("content_key")
+    val contentClass = varchar("content_class", 16) // 'PRIVATE' (RF>=2) | 'PUBLIC' (RF=1, evictable)
+    val nodeId = reference("node_id", Nodes.id, onDelete = ReferenceOption.CASCADE)
+    val sizeBytes = long("size_bytes").nullable()
+    val createdAt = timestamp("created_at")
+
+    init { uniqueIndex(ownerId, contentKey, nodeId) } // one replica per (content, device)
+}
