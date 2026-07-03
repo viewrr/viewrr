@@ -153,8 +153,15 @@ data class AppConfig(
                     ?: "/tmp/viewrr-hls-edge",
             ),
             cors = Cors(
+                // #118: comma-separated origins so prod (Dokploy) can inject
+                // CORS_ALLOWED_HOSTS=https://app.viewrr.stream via env. Bare "host:port" entries
+                // keep the http default (dev); scheme-qualified entries are honored (see CorsHosts).
+                // Falls back to a YAML list for backward compatibility if one is supplied.
                 allowedHosts = env.config.propertyOrNull("viewrr.cors.allowedHosts")
-                    ?.getList()
+                    ?.let { prop ->
+                        runCatching { prop.getList() }.getOrNull()
+                            ?: prop.getString().split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    }
                     ?: emptyList(),
             ),
             recs = Recs(

@@ -7,6 +7,7 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.plugins.forwardedheaders.*
 import org.koin.ktor.ext.inject
 import wtf.jobin.config.AppConfig
+import wtf.jobin.config.resolveCorsHosts
 
 fun Application.configureHttp() {
     val cfg by inject<AppConfig>()
@@ -18,7 +19,9 @@ fun Application.configureHttp() {
         allowMethod(HttpMethod.Patch)
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
-        cfg.cors.allowedHosts.forEach { allowHost(it) }
+        // #118: entries may carry a scheme (e.g. "https://app.viewrr.stream" in prod); bare
+        // "host:port" entries stay http-only, preserving the dev localhost behavior.
+        resolveCorsHosts(cfg.cors.allowedHosts).forEach { allowHost(it.host, schemes = it.schemes) }
     }
     install(Compression)
     install(ForwardedHeaders) // for use behind a reverse proxy

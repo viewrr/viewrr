@@ -53,9 +53,10 @@ viewrr:
     edgeCacheEnabled: "$MEDIA_EDGE_CACHE_ENABLED:false"    # #95 Phase 18 — DEFAULT-OFF; true = push HLS to same-LAN node
     hlsCacheRoot: "$HLS_CACHE_ROOT:/tmp/viewrr-hls-edge"   # #95 — AGENT-side store for pushed bundles
   cors:
-    allowedHosts:
-      - "localhost:5173"
-      - "localhost:3000"
+    # #118: comma-separated origins. Bare "host:port" => http (dev). Full "scheme://host" =>
+    # that scheme (prod). In prod set CORS_ALLOWED_HOSTS=https://app.viewrr.stream so the deployed
+    # client's cross-origin calls are allowed (StartupGuards is fatal on localhost entries in prod).
+    allowedHosts: "$CORS_ALLOWED_HOSTS:localhost:5173,localhost:3000"
   recs:
     grpcTarget: "$RECS_GRPC_TARGET:localhost:50051"
   scanner:
