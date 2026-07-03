@@ -86,6 +86,15 @@ with that user's secret key. Replaces 5a's raw `setContentKey`.
 Now neither the content key nor the identity secret key ever crosses the RPC seam. ponytail: the
 seed still arrives over the seam in `loadIdentity` (bootstrap); generating it in-worklet so even the
 seed never crosses is the identity-custody increment. Segment transfer over the swarm is 5c.
+
+**Proof.** `clearkey-selftest.mjs` is the deterministic, no-network proof that 5a+5b compose: in one
+process it seals the content key to an identity pubkey, opens it with that identity's secret key,
+decrypts the frozen GOLDEN segment with the sealed-then-opened key, and asserts an outsider's key
+cannot open the seal and a tampered segment fails authentication — exit 0/non-zero (self-timeout so
+it can't hang). `server/.../worklet/WorkletClearKeySmokeTest.kt` runs it as the PRIMARY assertion
+(gated on bare + `node_modules`, skips cleanly on a JVM-only CI checkout). It is the first runtime
+assertion of the #122 invariant: the content key is delivered SEALED and opened only in the worklet —
+never in the clear. Additive: no playback route consumes the decryptor yet (5c).
 ## Increment 2 — Hypercore append/replicate + Hyperswarm join (#121)
 
 The Hyper* data path itself: an append-only [Hypercore](https://github.com/holepunchto/hypercore)
