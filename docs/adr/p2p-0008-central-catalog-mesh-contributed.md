@@ -44,6 +44,29 @@ is the historically seized layer (indexes lose; protocols don't).
   TMDB** to prevent poisoning. Peer *selection* is client-side by Plus Code proximity +
   uplink speed (`04`). No central who-watched-what DB exists.
 
+## Database topology (single PG18, two extensions)
+
+Catalogue search + telemetry live in **one PostgreSQL 18 cluster**, not separate database
+servers. Both capabilities are **extensions loaded into the same PG**:
+
+- **`pg_search` (ParadeDB, BM25)** — catalogue search. Kept over native `tsvector` FTS
+  because search relevance is a product feature (fuzzy, faceted, BM25 ranking), not just
+  "type title, get title." Native FTS + `pg_trgm` was the lazier alternative and is the
+  fallback if BM25's cost ever outweighs the relevance gain.
+- **`timescaledb`** — telemetry hypertables (`#161`, phase-2; lands on the VPS Postgres per
+  `p2p-0015`), giving time-partitioning + compression + retention + continuous aggregates.
+
+Both track PostgreSQL 18 (pg_search v0.24.x; TimescaleDB 2.23+, Oct 2025), so neither blocks
+PG-major upgrades, and the "separate ParadeDB DB vs Timescale DB" split is a non-issue — they
+coexist as extensions in the single cluster (`p2p-0015`), backed up together (below).
+
+**Migrations:** versioned via **Flyway** (Exposed/ORM schema-utils are dev-only, not safe).
+**pgroll** (zero-downtime expand-contract) is parked, adopted only if the API moves to
+rolling/blue-green deploys — and then **scoped to plain relational tables** (users,
+entitlements, catalogue metadata), never run blindly over TimescaleDB hypertables or ParadeDB
+`bm25` indexes (view-based versioning doesn't fit those). At MB scale a brief single-instance
+restart is acceptable, so pgroll is not yet justified.
+
 ## Backups (catalogue + control-plane DB)
 
 Patroni (`p2p-0015`) provides **HA, not DR** — it survives a node loss, not a dropped
@@ -57,8 +80,9 @@ replication.
   `CREATE INDEX … USING bm25`, which needs ParadeDB installed + version-matched on restore
   and can dump fragile; only viable with a reindex step. Indexes are rebuildable from data,
   so logical + reindex is a fallback, not the primary.
-- **Restore verification must run against the ParadeDB image**, not stock Postgres — a
-  physical restore of this cluster needs the extension `.so` present to start.
+- **Restore verification must run against an image carrying BOTH extensions**
+  (`pg_search` + `timescaledb`), not stock Postgres — a physical restore of this cluster
+  needs both extension `.so`s present to start.
 - **Destination = NAS** (already the ciphertext backup tier, `p2p-0011`) **or R2** —
   self-hosted, neutral infra (`p2p-0005`). Data is ~MB, so backups are cheap and fast.
 - **Tool:** any physical-PITR tool works — `databasus` (tested-restore + UI, easier solo
