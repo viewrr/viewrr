@@ -40,6 +40,29 @@ class WorkletPairing(private val rpc: WorkletRpc) {
     }
 
     /**
+     * wrap a one-time [pairingSecretHex] in the frozen, integrity-checked vault-link URI the trusted
+     * device renders as a QR (P2P-ADR 0006 "the QR carries a fresh pairing secret"). Pure; no swarm.
+     */
+    suspend fun vaultLinkEncode(pairingSecretHex: String, timeoutMs: Long = 8000): String {
+        val params = buildJsonObject { put("pairingSecretHex", pairingSecretHex) }
+        return rpc.call("vaultLinkEncode", params, timeoutMs).jsonObject.getValue("qr").jsonPrimitive.content
+    }
+
+    /**
+     * parse + verify a scanned vault-link [qr] URI, returning the pairing secret and the topic it joins.
+     * Throws (via [WorkletRpcException]) on wrong scheme/version, bad length, or checksum mismatch — so a
+     * corrupt scan is rejected here, not as a downstream silent no-peer timeout. Pure; no swarm.
+     */
+    suspend fun vaultLinkDecode(qr: String, timeoutMs: Long = 8000): VaultLink {
+        val params = buildJsonObject { put("qr", qr) }
+        val obj = rpc.call("vaultLinkDecode", params, timeoutMs).jsonObject
+        return VaultLink(
+            pairingSecretHex = obj.getValue("pairingSecretHex").jsonPrimitive.content,
+            topicHex = obj.getValue("topicHex").jsonPrimitive.content,
+        )
+    }
+
+    /**
      * host side: begin a Vault Link. Mints a fresh one-time pairing secret, joins hash(secret) as
      * server, and arms delivery of [vaultHex] (the already-encrypted vault blob) to the first peer.
      * Returns immediately with the QR material; delivery completes under [pairFinish].
@@ -50,6 +73,7 @@ class WorkletPairing(private val rpc: WorkletRpc) {
         return PairSession(
             pairingSecretHex = obj.getValue("pairingSecretHex").jsonPrimitive.content,
             topicHex = obj.getValue("topicHex").jsonPrimitive.content,
+            qr = obj.getValue("qr").jsonPrimitive.content,
         )
     }
 
@@ -71,12 +95,32 @@ class WorkletPairing(private val rpc: WorkletRpc) {
         return rpc.call("pairJoin", params, timeoutMs).jsonObject.getValue("vaultHex").jsonPrimitive.content
     }
 
+    /**
+     * new-device side, from a scanned QR: join using the vault-link [qr] URI directly (the worklet
+     * decodes+verifies it before joining, so a corrupt scan fails fast). Otherwise identical to
+     * [pairJoin] — reads the vault off the Noise channel, then tears the pairing swarm down.
+     */
+    suspend fun pairJoinFromQr(qr: String, timeoutMs: Long = 60000): String {
+        val params = buildJsonObject { put("qr", qr) }
+        return rpc.call("pairJoin", params, timeoutMs).jsonObject.getValue("vaultHex").jsonPrimitive.content
+    }
+
     /** force-teardown of whatever pairing this worklet holds (timeout/cancel cleanup). */
     suspend fun pairAbort(timeoutMs: Long = 8000): Boolean =
         rpc.call("pairAbort", null, timeoutMs).jsonObject.getValue("aborted").jsonPrimitive.boolean
 
-    /** Host's QR material: the one-time [pairingSecretHex] (shown as QR) and the [topicHex] it hashes to. */
+    /**
+     * Host's QR material: the one-time [pairingSecretHex] (raw secret), the [topicHex] it hashes to,
+     * and [qr] — the frozen vault-link URI to render as the QR and hand to [pairJoinFromQr].
+     */
     data class PairSession(
+        val pairingSecretHex: String,
+        val topicHex: String,
+        val qr: String,
+    )
+
+    /** Decoded vault-link: the recovered [pairingSecretHex] and the [topicHex] a new device joins. */
+    data class VaultLink(
         val pairingSecretHex: String,
         val topicHex: String,
     )

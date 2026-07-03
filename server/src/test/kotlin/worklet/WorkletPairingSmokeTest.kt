@@ -16,8 +16,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * #126 (P2P-ADR 0006): proves the two private-discovery capabilities over the shipped worklet seam.
- * Two tests, deliberately split by reliability — same honesty model as [WorkletHypercoreSmokeTest]:
+ * #126 (P2P-ADR 0006): proves the private-discovery capabilities over the shipped worklet seam.
+ * Three tests, deliberately split by reliability — same honesty model as [WorkletHypercoreSmokeTest]:
  *
  * 1. [privateTopicDerivation_isDeterministic] — PRIMARY, CI-safe proof. Spawns `bare
  *    topic-selftest.mjs`, which asserts IN-PROCESS (keyed BLAKE2b, no network) that the same
@@ -25,7 +25,12 @@ import kotlin.test.assertTrue
  *    different label derives a different topic. No DHT, so it is deterministic — exit 0 = proven,
  *    non-zero = the derivation is broken. This is the real #126 proof.
  *
- * 2. [vaultLinkPairing_transfersOverEphemeralChannel] — SECONDARY, network-GATED smoke. Two real
+ * 2. [vaultLinkQrFormat_roundTripsAndRejectsCorruption] — CI-safe proof of the QR WIRE FORMAT. Spawns
+ *    `bare vaultlink-selftest.mjs`, which asserts IN-PROCESS (base64url + keyed BLAKE2b, no network)
+ *    that encode->decode preserves the pairing secret and topic, pins the frozen golden URI, and
+ *    REJECTS a corrupted / non-v1 scan. The ADR's "the QR carries a fresh pairing secret" made real.
+ *
+ * 3. [vaultLinkPairing_transfersOverEphemeralChannel] — network-GATED smoke. Two real
  *    `pairlet.mjs` subprocesses run a Vault Link: the host mints a one-time pairing secret and joins
  *    hash(secret); the new device joins the SAME topic from that secret, and the encrypted vault
  *    crosses the Noise-encrypted Hyperswarm channel; both then tear the ephemeral topic down. Needs
@@ -62,6 +67,29 @@ class WorkletPairingSmokeTest {
         drain.join(2000)
         assertEquals(0, proc.exitValue(), "[topic-selftest] non-zero exit — private-topic derivation broken:\n$out")
         println("[topic-selftest] OK (${runtime.name}): ${out.toString().trim()}")
+    }
+
+    @Test
+    fun vaultLinkQrFormat_roundTripsAndRejectsCorruption() {
+        val worklet = resolveWorklet("vaultlink-selftest.mjs")
+            ?: return skip("could not locate worklet/vaultlink-selftest.mjs")
+        val runtime = resolveRuntime() ?: return skip("no `bare` runtime on PATH (set WORKLET_TEST_RUNTIME)")
+        if (!depsInstalled(worklet)) return skip("worklet/node_modules missing — run `bun install` in worklet/")
+
+        val proc = ProcessBuilder(runtime.absolutePath, worklet.absolutePath)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .redirectOutput(ProcessBuilder.Redirect.PIPE)
+            .start()
+        val out = StringBuilder()
+        val drain = thread(isDaemon = true) { proc.inputStream.bufferedReader().forEachLine { out.appendLine(it) } }
+        val finished = proc.waitFor(20, TimeUnit.SECONDS)
+        if (!finished) {
+            proc.destroyForcibly()
+            throw AssertionError("[vaultlink-selftest] did not exit within 20s; output so far:\n$out")
+        }
+        drain.join(2000)
+        assertEquals(0, proc.exitValue(), "[vaultlink-selftest] non-zero exit — vault-link QR format broken:\n$out")
+        println("[vaultlink-selftest] OK (${runtime.name}): ${out.toString().trim()}")
     }
 
     @Test
