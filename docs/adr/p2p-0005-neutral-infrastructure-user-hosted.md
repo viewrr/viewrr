@@ -4,6 +4,12 @@
 reversed. Points 1 (NAS not a content origin) and 3 (payments deferred to phase-2)
 still stand.
 
+> **Keystone axiom — do not change without re-deciding the product.** Point 1 (viewrr
+> hosts no content; infra is neutral) is the premise `p2p-0006/0008/0010/0011/0014/0015/0016`
+> are all downstream of. Flipping it turns viewrr from an *index* into a content *host* —
+> collapsing the legal posture (`p2p-0010` de-index-only becomes meaningless) and the
+> entire P2P storage/serving design back toward central Hub/Node (`ADR-0001`).
+
 ## Context
 
 viewrr could be built as (1) a personal library, or (2) a content-distribution

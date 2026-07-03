@@ -1,8 +1,12 @@
 ---
-status: accepted
+status: superseded by p2p-0016
 ---
 
 # Per-device capability profile; drop the HLS ABR ladder
+
+> **Superseded by `p2p-0016`** (2026-07-03). The P2P re-architecture reverses this:
+> content is pre-packaged as an ABR-HLS rendition set once at ingest (no on-demand
+> per-device transcode), so the ABR ladder is back. See `p2p-0016`.
 
 Each playback device declares a **capability profile** (decodable codecs/containers,
 plus resolution/bitrate ceiling) carried on a **per-device Stremio key**. The Hub
