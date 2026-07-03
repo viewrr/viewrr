@@ -58,6 +58,7 @@ import wtf.jobin.cluster.NodeRegistry
 import wtf.jobin.cluster.agentRoutes
 import wtf.jobin.cluster.agentRawRoutes
 import wtf.jobin.cluster.agentHlsRoutes // #95
+import wtf.jobin.availability.catalogAvailabilityRoutes // #124
 
 fun Application.configureRouting() {
     val appConfig by inject<AppConfig>()
@@ -133,6 +134,7 @@ fun Application.configureRouting() {
         editorialRoutes(editorialRepo, editorialIngest)
         agentRoutes(nodeRegistry, db)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
+        catalogAvailabilityRoutes(db) // #124: public, TMDB-gated Title -> swarm topic lookup
     }
     partyHub.startFlushLoop(this)
     editorialIngest.startRefreshLoop(this, appConfig.editorial.refreshIntervalMinutes)
