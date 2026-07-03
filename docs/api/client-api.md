@@ -11,19 +11,19 @@ Status legend: ✅ exists today · 🔜 to build (tracked in Phase 20).
 ## Base + conventions
 - Base URL: the Hub, `${PUBLIC_BASE_URL}` (dev `http://localhost:8080`).
 - JSON everywhere; UUIDs as strings; timestamps ISO-8601.
-- Auth: `Authorization: Bearer <token>` (today legacy HS256 JWT from `/auth/login`;
-  **migrating to Keycloak OIDC RS256** — #112/#113. Treat the bearer as opaque; validate
-  via the issuer once Keycloak lands).
+- Auth: `Authorization: Bearer <token>` — an HS256 session token minted by the Hub
+  after a self-custody Ed25519 challenge→verify (#150; Keycloak/OIDC retired). Treat
+  the bearer as opaque. See [../CONNECT.md](../CONNECT.md).
 - Playback to devices is **unauthenticated by JWT** — it uses a **per-device stremio-key**
   in the URL path (TVs can't carry a bearer). See Playback.
 
-## Auth  (→ Keycloak, Phase 20)
+## Auth  (self-custody Ed25519 — #150 / ADR p2p-0013)
 | Method | Path | Status | Notes |
 |---|---|---|---|
-| POST | `/auth/login` | ✅ (legacy) | HS256 JWT; **retiring** for Keycloak (#115) |
-| POST | `/auth/refresh` | ✅ (legacy) | |
-| POST | `/auth/logout` | ✅ | |
-| — | Keycloak OIDC (Google/passkey/SSO) | 🔜 | #112-114; web+mobile are OIDC clients |
+| POST | `/identity/register` | ✅ | register a public key (idempotent); `{publicKey, signature, displayName?}` |
+| GET | `/identity/challenge` | ✅ | single-use nonce to sign |
+| POST | `/identity/verify` | ✅ | sign the challenge → HS256 session token pair |
+| — | Account registry: Ravencloak `@handle → publicKey` (directory, not gate) | 🔜 | ADR p2p-0013; redeploy pending |
 | POST | `/me/stremio-key` | ✅ | mint/return the caller's long-lived per-device key |
 
 ## Browse / Home
@@ -76,5 +76,6 @@ Stremio clients** (Nuvio). First-party viewrr clients use the REST above, not th
 
 ## Backend gaps to close (Phase 20, this agent)
 `/home/top`, `/home/featured`, `GET /media/{id}` detail, `GET /playback/{mediaId}` resolve,
-confirm `/media` sort params, then Keycloak (#112-115). Capability-profile + locality on
-playback resolve come with Phase 15.
+confirm `/media` sort params. Auth is done (self-custody Ed25519, #150); the Account
+registry (Ravencloak, ADR p2p-0013) is the remaining identity work. Capability-profile +
+locality on playback resolve come with Phase 15.

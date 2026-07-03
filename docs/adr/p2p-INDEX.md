@@ -19,5 +19,6 @@
 | [p2p-0010](p2p-0010-operator-power-deindex-only-no-backdoor.md) | De-index-only, no backdoor | #128 |
 | [p2p-0011](p2p-0011-multi-device-storage-pool.md) | Storage pool + encrypted backup | #127 |
 | [p2p-0012](p2p-0012-no-device-fingerprinting.md) | No device fingerprinting | #129 |
+| [p2p-0013](p2p-0013-account-registry-ravencloak-directory-not-gate.md) | Account registry (Ravencloak) directory, not gate | — |
 
 Glossary: [CONTEXT-p2p.md](CONTEXT-p2p.md)

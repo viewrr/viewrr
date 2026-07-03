@@ -1,5 +1,10 @@
 # viewrr — Context Glossary
 
+> **HLS-era glossary (Hub/Node/transcode).** Describes the current server-side media code
+> (`server/src/main/kotlin/media/*`), still live. The forward architecture is P2P /
+> self-custody — see `docs/adr/CONTEXT-p2p.md` + the `p2p-*` ADRs, which supersede the
+> Hub/Node/transcode model as it lands. Retire this file once the HLS media code is removed.
+
 Canonical terms for the viewrr domain. Glossary only — no implementation detail.
 
 ## Clients
@@ -43,6 +48,35 @@ Hub/Node split.
 
 ## Concepts
 
+### Identity
+The principal — who or what viewrr authenticates. An Identity is proven by an
+Ed25519 public key: it registers a key, then answers a challenge with a signed
+response. Every auth-scoped record (Owner, watcher, party member) belongs to an
+Identity. Self-custody — the key holder *is* the account. One human's devices
+share the same Identity key (copied at pairing; the wallet model), so the
+public key alone is globally unique. A central Account registry maps the
+Identity to a Handle, but never gates authentication — the key proof is
+self-contained and works offline.
+
+### Handle
+The human-facing account name (`@handle`) that maps to an Identity's public key
+in the Account registry. Allocated once at registration, globally unique. The
+public key is the canonical identity; the Handle is a friendly alias for
+discovery and login UX. Carries no personally identifiable information.
+
+### Account registry
+The central, eventual-consistent directory (Ravencloak) that allocates unique
+Handles and indexes `@handle → publicKey`. A **directory, not a gate**:
+authoritative only for Handle uniqueness and login/SSO experience, stores no
+PII, and is never required to authenticate or to play on an already-paired
+device. If it is offline, self-custody auth and playback continue unaffected.
+
+### User (legacy)
+The earlier principal (password / OIDC era), being drained. Same real-world
+subject as an Identity, older representation. Retained only for admin surfaces
+not yet ported and for historical rows predating the Identity model. Not a
+distinct concept — do not model new work against it.
+
 ### Title
 A logical work — one movie, one episode, one track. Carries metadata (tmdbId,
 poster, show/season/episode, etc.) and is what the catalog lists. A Title may
@@ -83,10 +117,14 @@ match the requesting device's profile rather than to a fixed maximum. Carried on
 a per-device key (see below).
 
 ### Per-device key
-The Stremio install key, scoped to a single playback device (not just a user).
-Each device's key carries its capability profile, giving the Hub a channel the
-Stremio protocol itself lacks. Resolving a key yields both the user (for
-parental scoping) and the profile (for transcode targeting).
+A long-lived, revocable capability token bound to an **Identity** and embedded
+in the Stremio install URL — the credential a TV or Stremio addon carries in a
+URL because it cannot do per-request challenge-response. Idempotent per Identity;
+a variant may additionally carry a per-device capability profile, giving the Hub
+a channel the Stremio protocol itself lacks. Resolving a key yields the Identity
+(for parental scoping) and, if present, the profile (for transcode targeting).
+Distinct from the server-issued content-decryption key (being retired for
+self-custody clear-key in the worklet) — that one is not this.
 
 ### Direct-play
 Serving a title to a device that can already decode the source codec/container,
