@@ -54,10 +54,16 @@ ownership model, not enforceable rental — despite legacy "SVOD" wording in old
 
 ## NAS
 
-Your homelab node. Its viewrr role is **DHT bootstrap + Ktor metadata registry** only
-(plus an optional *paid* backup tier later). It is **not** a content origin/seeder —
-content originates from users' own devices. See `docs/adr/p2p-0005`. (Legacy docs calling
-the NAS "origin seeder of all content variants" are superseded.)
+A user's homelab node — a member of **their own** device Storage Pool (`p2p-0011`), not
+viewrr infrastructure. It is **not** a content origin/seeder for the network; content
+originates from users' own devices (`p2p-0005`). Its only network-wide service is the
+optional **Backup Tier** (ciphertext-only, the user's own pool). (Legacy docs calling the
+NAS "origin seeder of all content variants" are superseded.)
+
+viewrr's server-side infra — **DHT bootstrap, Postgres, Ktor, catalog metadata** — runs
+on a **public VPS**, never the NAS (`p2p-0014`, `p2p-0015`; the "jobin-nas as infra hub"
+framing is dropped). The VPS is a control plane only; it stores **zero content** — catalog
+metadata + critical tables (users/entitlements/payments) only.
 
 ## Catalog
 
@@ -69,6 +75,22 @@ UUID v5) so the same film from different uploaders dedups to one entry. viewrr *
 index — this is the product's core SVOD differentiator, and its main legal exposure
 (needs a takedown pipeline). See `docs/adr/p2p-0008` (supersedes the earlier "no catalog"
 stance in `P2P-ADR 0005`).
+
+## Catalog Cache
+
+The client-side **full replica** of the central Catalog, held in SQLite + FTS5 on each
+device. Synced from the ParadeDB catalog API by delta (UUID-v5-keyed), not from a
+Hyperbee. All client browse/search runs against this local cache, so browse and search
+keep working while the server is unreachable. It is a derived read cache — never
+authoritative, never a write path. (Rejects the "catalog → Hyperbee, NAS sole writer,
+tmdbId-keyed" migration proposed in doc `13-database-ha` Part 1.)
+
+## Rendition Set
+
+The **ABR-HLS package** a title is encoded into **once, at ingest**: AV1 rungs + one
+H.264 compat rung, as fMP4 segments + playlists, keyed by `contentUUID`. No on-demand
+transcode; the **P2P unit is the HLS segment**, sourced nearest-first (`p2p-0009`) and
+cached RF=1/LRU on the client. See `p2p-0016` (supersedes HLS-era `ADR-0003`).
 
 ## Availability
 
