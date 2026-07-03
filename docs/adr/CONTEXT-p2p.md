@@ -61,8 +61,8 @@ optional **Backup Tier** (ciphertext-only, the user's own pool). (Legacy docs ca
 NAS "origin seeder of all content variants" are superseded.)
 
 viewrr's server-side infra — **DHT bootstrap, Postgres, Ktor, catalog metadata** — runs
-on a **public VPS**, never the NAS (`p2p-0014`, `p2p-0007`-era "jobin-nas as infra hub"
-framing dropped). The VPS is a control plane only; it stores **zero content** — catalog
+on a **public VPS**, never the NAS (`p2p-0014`, `p2p-0015`; the "jobin-nas as infra hub"
+framing is dropped). The VPS is a control plane only; it stores **zero content** — catalog
 metadata + critical tables (users/entitlements/payments) only.
 
 ## Catalog
@@ -87,13 +87,10 @@ tmdbId-keyed" migration proposed in doc `13-database-ha` Part 1.)
 
 ## Rendition Set
 
-The **ABR-HLS package** a title is encoded into **once, at ingest** (`p2p-0016`): full
-AV1 rungs (1080/720/480) + one H.264 720p compat rung, as fMP4 segments + playlists,
-keyed by `contentUUID`. There is no on-demand/per-device transcode — each client's native
-player picks the rung it can decode (Apple → H.264, others → AV1). The **P2P unit is the
-HLS segment**, not a Hyperdrive file block; segments are sourced nearest-first (`p2p-0009`)
-and cached in the client's public **Catalog**-adjacent segment cache (RF=1, LRU,
-deleted when the title is). See `p2p-0016` (supersedes HLS-era `ADR-0003`).
+The **ABR-HLS package** a title is encoded into **once, at ingest**: AV1 rungs + one
+H.264 compat rung, as fMP4 segments + playlists, keyed by `contentUUID`. No on-demand
+transcode; the **P2P unit is the HLS segment**, sourced nearest-first (`p2p-0009`) and
+cached RF=1/LRU on the client. See `p2p-0016` (supersedes HLS-era `ADR-0003`).
 
 ## Availability
 

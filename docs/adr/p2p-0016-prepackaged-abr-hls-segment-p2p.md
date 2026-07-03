@@ -39,8 +39,7 @@ entirely: encode once, let each client pick the rendition its native player can 
 
 ## Consequences
 
-- No live transcoder anywhere — the hardest part of `p2p-0003` disappears.
+- No live transcoder anywhere — the hardest part of `ADR-0003` disappears.
 - Ingest is heavier (encode a ladder once) and gated to capable boxes; phone-only users
   depend on a pool desktop/NAS to package.
 - Pool storage per title grows with ladder size — kept lean (§3) to bound it.
-- `p2p-0009` and `p2p-0011` are unchanged in intent, now applied at segment granularity.
