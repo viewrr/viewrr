@@ -85,6 +85,16 @@ keep working while the server is unreachable. It is a derived read cache — nev
 authoritative, never a write path. (Rejects the "catalog → Hyperbee, NAS sole writer,
 tmdbId-keyed" migration proposed in doc `13-database-ha` Part 1.)
 
+## Rendition Set
+
+The **ABR-HLS package** a title is encoded into **once, at ingest** (`p2p-0016`): full
+AV1 rungs (1080/720/480) + one H.264 720p compat rung, as fMP4 segments + playlists,
+keyed by `contentUUID`. There is no on-demand/per-device transcode — each client's native
+player picks the rung it can decode (Apple → H.264, others → AV1). The **P2P unit is the
+HLS segment**, not a Hyperdrive file block; segments are sourced nearest-first (`p2p-0009`)
+and cached in the client's public **Catalog**-adjacent segment cache (RF=1, LRU,
+deleted when the title is). See `p2p-0016` (supersedes HLS-era `ADR-0003`).
+
 ## Availability
 
 The fact that some peer holds a given title. Discovered **P2P via the DHT**

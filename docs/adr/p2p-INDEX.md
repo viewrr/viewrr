@@ -22,5 +22,6 @@
 | [p2p-0013](p2p-0013-account-registry-ravencloak-directory-not-gate.md) | Account registry (Ravencloak) directory, not gate | — |
 | [p2p-0014](p2p-0014-dht-ingress-and-overlay.md) | DHT bootstrap on public VPS; overlay internal; media P2P-direct | — |
 | [p2p-0015](p2p-0015-vps-sole-infra-nas-demoted.md) | VPS = sole server infra; NAS demoted to peer + Backup Tier | — |
+| [p2p-0016](p2p-0016-prepackaged-abr-hls-segment-p2p.md) | Pre-packaged ABR-HLS, encode-once-at-ingest, segment P2P, native player (supersedes ADR-0003) | — |
 
 Glossary: [CONTEXT-p2p.md](CONTEXT-p2p.md)
