@@ -51,6 +51,23 @@ money-transmission) are orthogonal.
 5. **Payout is contingent on proof the provider still holds the bytes** — the escrow
    releases a provider's share only against a storage proof over time (see Open
    Questions — this mechanism is the hard part and is not yet chosen).
+6. **Deal migration / re-bidding is allowed, but handoff-before-release with
+   friction.** A provider may defect from a lower-paying deal to a higher bid, but:
+   (a) **handoff first** — the replacement provider pulls the segment (recoverable
+   via RF≥2 / erasure coding) and **proves storage before the defector is released**;
+   the defector keeps serving until then, so durability never dips; (b) the swap is
+   permitted only if `new_payout − exit_penalty − handoff_cost > old_payout`, so a
+   defector funds its own replacement out of the upside; (c) a **minimum term /
+   lock-up + early-exit bond** (contract-slashable) damps churn thrash. Exact
+   penalty/lock-up parameters: unresolved (Open Question 7).
+7. **The escrow contract is itself the SPOF-free job queue + lock — no separate
+   matching backend.** Reassignment jobs are contract state. Any backend client
+   claims a job via a **claim transaction** that grants a **timed exclusive lease**
+   (locked to one worker); if it doesn't submit proof-of-handoff before the lease
+   expires, the lease auto-releases and another worker claims. The blockchain is the
+   coordination substrate (one-winner-per-slot by construction); workers are
+   stateless (do the off-chain data move, submit proof). No bespoke distributed
+   queue / consensus system is built.
 
 ## Considered options
 
@@ -82,7 +99,11 @@ money-transmission) are orthogonal.
    (Filecoin PoRep/PoSt-class proofs). This is genuinely hard. **Strong
    recommendation to evaluate integrating an existing network (Storj/Sia/Filecoin/
    Arweave) rather than building proof-of-spacetime from scratch.** Build-vs-integrate
-   is the biggest open decision.
+   is the biggest open decision. Note **Sia's `renterd` already auto-repairs and
+   migrates a dataset's shards** when hosts drop — so integrating Sia **dissolves most
+   of the Decision-6/7 machinery** (deal migration + reassignment matching); a bespoke
+   matcher is mostly needed only on the build-our-own path. Filecoin has proofs but no
+   native auto-repair (needs a layer on top).
 2. **Recurring rent vs one-time fee (economic flaw to resolve).** The example
    "$5 one-time for 15–20 GB" is **economically broken**: storage is an *ongoing*
    cost to the provider (bytes held indefinitely), so a one-time fee can't fund
@@ -96,3 +117,10 @@ money-transmission) are orthogonal.
    contract standard?) and the proof-verification cost on-chain.
 5. **Abuse/takedown** for buyer-stored arbitrary content, reconciled with
    `p2p-0010` (de-index-only, no backdoor) and encryption-at-rest.
+6. **Whether Decision 7's bespoke matcher is even needed** — decided by Open
+   Question 1. Integrating Sia (`renterd` auto-repair) largely removes it; building
+   our own mesh requires it (contract-as-queue per Decision 7).
+7. **Deal-migration parameters (Decision 6):** minimum term / lock-up length,
+   early-exit bond size, how `handoff_cost` is measured and charged, and the lease
+   TTL for a claimed reassignment job. The *mechanism* is decided; the *numbers* are
+   not.
