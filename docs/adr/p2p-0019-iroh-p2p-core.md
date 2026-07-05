@@ -1,4 +1,4 @@
-# 0019 — P2P core = Iroh (native, dial-by-Ed25519-key); adopt iroh + iroh-blobs + iroh-gossip, skip iroh-docs
+# 0019 — P2P core = Iroh (native, dial-by-Ed25519-key); core Endpoint only, segment transfer built over streams
 
 **Status:** Proposed (2026-07-04). **Supersedes the transport + embedding decisions in
 `p2p-0002`, `p2p-0003` (bare-worklet JS) and the transport half of `p2p-0014` (HyperDHT
@@ -16,10 +16,13 @@ awkward, high-maintenance seam of the whole architecture.
 library — "dial keys, not IPs" — that removes the JS runtime and aligns with three existing
 decisions:
 
-1. **Native, official Kotlin + Swift bindings** from one cross-compiled Rust core
-   (iroh-ffi) → covers Android JVM **and** iOS native from a single implementation. **Kills
-   the bare-worklet JS embedding.** Same FFI pattern already accepted for PowerSync
-   (`p2p-0018`).
+1. **Native bindings, no JS runtime** — `iroh-ffi` (uniffi) publishes a **Kotlin/JVM+Android**
+   artifact (`computer.iroh:iroh`) **and** a **Swift** xcframework (iOS/macOS) from one Rust
+   core. **Not a single KMP artifact** — they are separate per-language bindings, wired in
+   Compose MP via **expect/actual** (Android/desktop → Kotlin binding, iOS → Swift binding).
+   Still **kills the bare-worklet JS embedding**; same FFI pattern accepted for PowerSync
+   (`p2p-0018`). **Caveat (see Decision §2):** the FFI exposes **core Endpoint only** — the
+   higher-level protocol crates are not bound.
 2. **Dial-by-Ed25519-key** — a peer's node id *is* its account publicKey. viewrr identity is
    already **publicKey = account** (Ed25519 self-custody). One identity, no mapping layer.
 3. **QUIC + QNT hole-punching (~90%)** with **connection migration** (Wi-Fi↔cellular
@@ -40,18 +43,32 @@ with no internet.
 1. **P2P core = Iroh.** Replace hyper\* and the bare-worklet JS runtime. rust-libp2p rejected
    (its kad-DHT is the feature you don't need; ~70% hole-punch; no polished KMP bindings).
    jvm-libp2p rejected (JVM-only — no iOS path; transport still prototype).
-2. **Adopt only the mature Iroh crates** (n0 split Iroh into a core + opt-in protocol crates
-   stacked via the Router):
-   - **`iroh`** core (1.0) — dial-by-key, QUIC, hole-punching.
-   - **`iroh-blobs`** — content-addressed BLAKE3 blobs with verified streaming. This **is**
-     the segment transfer/store/integrity/resume/multi-provider layer (`p2p-0016`), replacing
-     the bulk of custom mesh code.
-   - **`iroh-gossip`** (stable) — topic broadcast for availability announcements, presence,
-     and pairing signalling (`p2p-0006`).
-3. **Skip `iroh-docs`.** It is the least-mature crate (no 1.0 target, CRDT meta-protocol) —
-   and viewrr does not need it: the catalogue is server-authoritative (`p2p-0008` ParadeDB)
-   and the directory is centralised (`p2p-0013` Ravencloak). No P2P multiwriter state exists
-   to sync. Centralisation removes the dependency on the risky crate.
+2. **Use the Iroh 1.0 core Endpoint only — the FFI does not bind the protocol crates.**
+   `iroh-ffi` mirrors the stabilised 1.0 surface (endpoints, connections, paths, tickets,
+   relays, dial-by-key, encrypted byte send/recv). **`iroh-blobs`, `iroh-gossip`,
+   `iroh-docs` are explicitly out of scope** (not at 1.0). So on the client you get
+   **transport, not content-addressed blob transfer.** The segment layer is built **over**
+   the Endpoint:
+   The purpose-built library **is `iroh-blobs`** — "a simple request-response protocol based
+   on BLAKE3 verified streaming" with range requests (= HLS-segment fetch). It is simply not
+   in the mobile FFI (higher protocols out of 1.0 scope; n0's FFI work for them is paused).
+   Two ways to consume it:
+   - **Option A (chosen):** a **thin** request/response over Iroh byte streams — "give me
+     segment by **BLAKE3 hash**" to a **catalogue-known** peer (`p2p-0008` availability,
+     `p2p-0009` ranking) — with **integrity from the `bao`/BLAKE3 verified-streaming crate**,
+     NOT hand-rolled. Only the request framing is ours; the hard part is a library. Rides
+     only **stable** surfaces (iroh 1.0 Endpoint + BLAKE3), tracks nothing pre-1.0. Small
+     because `p2p-0016` scopes the unit; not a general DHT/replication system.
+   - **Option B (rejected):** wrap `iroh-blobs` itself via uniffi (bind the real library, ~a
+     dozen methods). More feature-complete (blob sequences, GC) but chains us to a **paused,
+     pre-1.0 FFI we'd maintain alone**. Not worth it for a transfer this narrowly scoped.
+   - **libtorrent (BT v2)** was considered — mature, content-addressed, mobile bindings — but
+     brings its **own swarm/DHT/transport**, bypassing Iroh and fighting `p2p-0009`. Rejected.
+   Availability broadcast / presence (`p2p-0006`) is likewise a thin message over Endpoint
+   streams (or via the catalogue), not `iroh-gossip`.
+3. **`iroh-docs` is irrelevant regardless** — even if it were bound, viewrr has no P2P
+   multiwriter state: the catalogue is server-authoritative (`p2p-0008` ParadeDB) and the
+   directory is centralised (`p2p-0013` Ravencloak).
 4. **Self-host the Iroh relay + DNS discovery on the VPS** (`p2p-0005` neutral infra,
    co-located per `p2p-0015`). Same role HyperDHT bootstrap played, native tech.
 5. **Keep the policy layer as custom code — it is the product, not boilerplate.** Iroh
@@ -72,8 +89,12 @@ with no internet.
   pure Compose MP + one native Rust lib via KMP bindings.
 - **One identity** — Ed25519 account key = Iroh node key. No identity bridging.
 - **Mobile streaming gains** — ~90% hole-punch + Wi-Fi↔cellular connection migration.
-- **~80% of mesh app-layer code removed** — transfer/integrity/discovery handled by
-  iroh-blobs + iroh-gossip. Remaining custom code is thin policy (the moat).
+- **Transport/NAT/discovery removed + JS embedding deleted** — dial-by-key, QUIC, hole-
+  punching, relay, encrypted streams come from the Iroh core. **But content-addressed
+  segment transfer + availability broadcast stay custom** (thin protocol over the Endpoint,
+  Decision §2) because the FFI omits iroh-blobs/gossip. Less code removed than a full
+  iroh-blobs adoption would give — the segment transport is DIY, though narrowly scoped by
+  `p2p-0016`.
 - **New self-hosted component** — the Iroh relay on the VPS (replaces HyperDHT bootstrap).
 - **Migration cost** — swapping hyper\* → Iroh is real work, but viewrr is POC-stage; cheap
   now, expensive later.
@@ -83,16 +104,18 @@ with no internet.
 
 ## Spike gate (before Accepted)
 
-1. Bind **iroh-ffi Kotlin** into a shared KMP module; confirm packaging (KMP artifact vs
-   Android lib + separate Swift package) drops cleanly into Compose MP for **both** Android
-   and iOS.
+1. Wire the bindings via **expect/actual**: Android/desktop → `computer.iroh:iroh`
+   (Kotlin/JVM), iOS → Swift xcframework. Confirm a shared interface over both drops into
+   Compose MP. (There is **no** single KMP artifact — this glue is the integration cost.)
 2. Dial two devices **by Ed25519 pubkey** across NAT; measure hole-punch success + Wi-Fi↔
    cellular migration on real phones.
-3. Transfer one encrypted HLS segment via **iroh-blobs**; verify BLAKE3 integrity + resume.
-4. Broadcast an availability announce via **iroh-gossip**.
+3. Prototype the **thin segment protocol over Endpoint streams** (Decision §2 Option A):
+   request a segment by BLAKE3 hash from a catalogue-known peer, verify integrity, resume.
+   Confirm it stays small — if it balloons, reassess Option B (fork iroh-ffi).
+4. Prototype the **availability announce** as a thin Endpoint message (or via the catalogue).
 5. Confirm the **self-hosted relay** on the VPS handles discovery without n0's hosted relay.
 
-If (1) and (2) hold → promote to **Accepted** and open the `p2p-0007` crypto revisit.
+If (1)–(3) hold → promote to **Accepted** and open the `p2p-0007` crypto revisit.
 
 ## References
 
