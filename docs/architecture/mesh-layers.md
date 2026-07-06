@@ -218,19 +218,19 @@ flowchart LR
 
 ## 7. Where to dig deeper (ADR index)
 
-- **0001** — self-custody clear-key content protection (no hardware DRM)
-- **0002** — Compose Multiplatform client + libmpv player
-- **0005 / 0015** — neutral, co-located VPS infrastructure
-- **0006** — Vault Link device pairing (the wallet model)
-- **0008** — central catalogue (ParadeDB)
-- **0009** — peer selection (Plus Code proximity + uplink)
-- **0011** — replication factor + LRU eviction across the device pool
-- **0013** — Ravencloak account directory (directory, not a gate)
-- **0016** — HLS segment = the P2P transfer unit
-- **0018** — PowerSync client-side catalogue mirror
-- **0019** — **P2P core = Iroh** (the transport-floor pivot; supersedes the worklet)
-- **0025** — identity key ≠ Iroh node key; signed device set
-- **0026** — at-rest crypto moves into the Iroh Rust FFI
+- [**0001**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0001-self-custody-clearkey-no-hardware-drm.md) — self-custody clear-key content protection (no hardware DRM)
+- [**0002**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0002-compose-desktop-libvlc-drop-electron.md) — Compose Multiplatform client + libmpv player
+- [**0005**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0005-neutral-infrastructure-user-hosted.md) / [**0015**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0015-vps-sole-infra-nas-demoted.md) — neutral, co-located VPS infrastructure
+- [**0006**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0006-private-discovery-topics-and-pairing.md) — Vault Link device pairing (the wallet model)
+- [**0008**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0008-central-catalog-mesh-contributed.md) — central catalogue (ParadeDB)
+- [**0009**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0009-peer-selection-proximity-uplink.md) — peer selection (Plus Code proximity + uplink)
+- [**0011**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0011-multi-device-storage-pool.md) — replication factor + LRU eviction across the device pool
+- [**0013**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0013-account-registry-ravencloak-directory-not-gate.md) — Ravencloak account directory (directory, not a gate)
+- [**0016**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0016-prepackaged-abr-hls-segment-p2p.md) — HLS segment = the P2P transfer unit
+- [**0018**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0018-client-sync-powersync.md) — PowerSync client-side catalogue mirror
+- [**0019**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0019-iroh-p2p-core.md) — **P2P core = Iroh** (the transport-floor pivot; supersedes the worklet)
+- [**0025**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0025-identity-key-vs-iroh-node-key-device-set.md) — identity key ≠ Iroh node key; signed device set
+- [**0026**](https://github.com/viewrr/viewrr/blob/main/docs/adr/p2p-0026-crypto-in-iroh-ffi-post-worklet.md) — at-rest crypto moves into the Iroh Rust FFI
 
 ---
 
