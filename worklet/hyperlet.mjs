@@ -10,10 +10,11 @@
 //   get       { handle, seq }             -> { seq, data }   (awaits replication on a reader)
 //   length    { handle }                  -> { length }
 //   swarmJoin { handle, topicHex }        -> { topicHex, server, client }
+//   swarmLookup { topicHex, waitMs? }     -> { topicHex, peersFound }  (mesh-hub, read-only DHT check)
 //
 // Run under `bare` (bare-native stdio); needs `bun install` in worklet/ for the Hyper* deps.
 import { serveRpc } from './stdio.mjs'
-import { openCore, append, get, length, swarmJoin } from './core.mjs'
+import { openCore, append, get, length, swarmJoin, swarmLookup } from './core.mjs'
 
 serveRpc({
   ping: () => 'pong',
@@ -22,4 +23,5 @@ serveRpc({
   get,
   length,
   swarmJoin,
+  swarmLookup,
 })

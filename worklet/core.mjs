@@ -92,6 +92,35 @@ export async function swarmJoin(params) {
 }
 
 /**
+ * mesh-hub (P2P-ADR 0008/0014): swarmLookup({ topicHex, waitMs? }) -> { topicHex, peersFound }.
+ * The read-only counterpart to swarmJoin's server/announce path: joins [topicHex] on a FRESH,
+ * EPHEMERAL Hyperswarm as a lookup-only client (no core, nothing to replicate, nothing announced),
+ * counts distinct peer connections discovered within [waitMs], then leaves the topic and destroys
+ * the swarm. This is the Hub asking "does the mesh have ANY provider for this content" — never
+ * "who" (P2P-ADR 0008: no publicKey<->title table). peersFound is a presence COUNT, not a peer
+ * identity list; nothing about a connection is retained past this call.
+ *
+ * Deliberately its own throwaway swarm rather than reusing a `cores` entry's swarm: a lookup has no
+ * core to replicate and no reason to keep a long-lived swarm member around after the check.
+ */
+export async function swarmLookup(params) {
+  const topic = Buffer.from(params.topicHex, 'hex')
+  const waitMs = params.waitMs ?? 3000
+  const swarm = new Hyperswarm()
+  let peersFound = 0
+  swarm.on('connection', () => { peersFound += 1 })
+  try {
+    const discovery = swarm.join(topic, { server: false, client: true })
+    await discovery.flushed() // announced/looked-up on the DHT
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+    return { topicHex: params.topicHex, peersFound }
+  } finally {
+    await swarm.leave(topic)
+    await swarm.destroy()
+  }
+}
+
+/**
  * replicateDirect(handleA, handleB): wire two LOCAL cores together over an in-memory duplex — no
  * DHT, no network. This is the deterministic proof primitive: pipe A's replication stream into B's
  * and back, and B pulls A's blocks. Not on the RPC surface (hyperlet.mjs never maps it); it exists

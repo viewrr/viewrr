@@ -1,5 +1,7 @@
 package wtf.jobin.p2p
 
+import org.slf4j.LoggerFactory
+
 /**
  * #125 (P2P) Peer SELECTION — the wiring layer directly on top of the pure ranker
  * [rankPeers] (PeerRanking.kt, #148). Turns a ranked list into an actionable choice:
@@ -48,13 +50,23 @@ data class PeerSelection(
  * Today it is a thin adapter over [rankPeers].
  */
 class PeerSelectionService {
+    private val log = LoggerFactory.getLogger(PeerSelectionService::class.java)
+
     /**
      * Rank [candidates] for [requesterPlusCode] and pick the best as primary, the rest
      * as an ordered fallback chain. Empty candidate list → null (nothing to select).
      */
     fun select(requesterPlusCode: String, candidates: List<CandidatePeer>): PeerSelection? {
         val ranked = rankPeers(requesterPlusCode, candidates)
-        val primary = ranked.firstOrNull() ?: return null // empty candidates: no selection
+        val primary = ranked.firstOrNull()
+        if (primary == null) {
+            log.debug("peer selection: no candidates for requester")
+            return null
+        }
+        log.debug(
+            "peer selection: {} candidate(s) -> primary={}, {} fallback(s)",
+            candidates.size, primary.id, ranked.size - 1,
+        )
         return PeerSelection(primary, ranked.drop(1))
     }
 }

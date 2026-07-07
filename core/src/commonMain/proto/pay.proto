@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+// Vendored from viewrr-pay: proto/viewrr/pay/v1/pay.proto (mirror, not fork — keep byte-for-byte
+// in sync with the canonical contract; this file is the shared artifact both repos build against).
+// See docs/pay/1-grpc-contract-service-skeleton.md and DECISION 0001
+// (viewrr-pay/docs/decisions/0001-key-custody-signing-model.md): viewrr-pay is a pure remote
+// signer — the Hub/device holds and uses the signing key. The Hub's SettlementClient (this
+// module's consumer, server/src/main/kotlin/pay/SettlementClient.kt) is the gRPC caller for
+// EVERYTHING money/settlement/storage-backstop related in viewrr-pay; it wires the READ-ONLY
+// WalletService calls first (EnsureWallet, GetBalance) — BandwidthService/StorageService are
+// vendored for contract completeness but NOT called yet (money-movement RPCs gated on legal #9).
+//
+// Package viewrr.pay.v1 is the gRPC surface the Kotlin Hub calls for anything
+// money / settlement / storage-backstop related.
+//
+// STATUS: PROPOSAL. This is the first-draft contract for build-order slice 1
+// (GETTING_STARTED.md). It MUST be agreed with the Hub side (github.com/viewrr/viewrr)
+// before going deep — treat every RPC and field as reviewable, not final.
+//
+// Invariants baked into this surface (GETTING_STARTED.md §3):
+//   - Non-custodial: this service never holds/routes/nets user funds. Escrow is
+//     on-chain; viewrr's cut is a coded protocol fee. RPCs return references to
+//     on-chain state (addresses, tx hashes, deal ids), never balances it controls.
+//   - Opt-in: no wallet exists unless EnsureWallet is called for the account.
+//   - USDC for users + contributors. Amounts are USDC base units (6 decimals) as
+//     uint64 — integer, never float. The Sia/Filecoin backstop's native-token leg
+//     is internal to viewrr's margin and is NOT on this user-facing surface.
+//   - Pay-on-verified-delivery: settlement RPCs carry the proof (segment hash /
+//     storage proof) that authorises the release. No proof, no pay.
+package viewrr.pay.v1;
+
+option go_package = "github.com/viewrr/pay/internal/rpc/paypb;paypb";
+// Kotlin codegen options (Hub-side addition only — the go_package above and everything below
+// this line down to the closing brace of DealState is byte-for-byte the canonical contract).
+option java_package = "wtf.jobin.pay.v1";
+option java_multiple_files = true;
+
+// ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+// UsdcAmount is a USDC value in base units (6 decimals). 1 USDC = 1_000_000.
+// Integer on purpose — money code never touches floats.
+message UsdcAmount {
+  uint64 base_units = 1;
+}
+
+// Account identifies a viewrr account. The pseudonymous account id from the Hub;
+// the payment wallet is derived from the same BIP39 seed as the Ed25519 identity
+// (separate HD path — see p2p-0020 / #142). This service never receives the seed.
+message Account {
+  string account_id = 1;
+}
+
+// ---------------------------------------------------------------------------
+// WalletService — opt-in, non-custodial EVM wallet derived from the account seed.
+// ---------------------------------------------------------------------------
+service WalletService {
+  // EnsureWallet is the opt-in point: derives (or returns) the account's EVM
+  // wallet address on the chosen L2. No wallet exists until this is called.
+  rpc EnsureWallet(EnsureWalletRequest) returns (EnsureWalletResponse);
+
+  // GetBalance reads on-chain USDC balance. Read-through to the chain, no custody.
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+message EnsureWalletRequest {
+  Account account = 1;
+}
+message EnsureWalletResponse {
+  string wallet_address = 1; // 0x-prefixed EVM address on the L2.
+}
+
+message GetBalanceRequest {
+  Account account = 1;
+}
+message GetBalanceResponse {
+  UsdcAmount balance = 1;
+}
+
+// ---------------------------------------------------------------------------
+// BandwidthService — USDC L2 payment channels, per-segment pay-on-verified-
+// delivery. First revenue path (p2p-0020).
+// ---------------------------------------------------------------------------
+service BandwidthService {
+  // OpenChannel opens or reuses a pairwise payer->payee channel with a max-spend
+  // cap. Funds sit in the on-chain channel, not with this service.
+  rpc OpenChannel(OpenChannelRequest) returns (OpenChannelResponse);
+
+  // Quote returns the price for a segment before delivery.
+  rpc Quote(QuoteRequest) returns (QuoteResponse);
+
+  // SettleSegment releases a micropayment for ONE delivered segment. The request
+  // carries the delivery proof (segment hash the payer verified); release only
+  // happens against that proof — never pay-then-hope.
+  rpc SettleSegment(SettleSegmentRequest) returns (SettleSegmentResponse);
+
+  // CloseChannel settles the channel's final balance on-chain and closes it.
+  rpc CloseChannel(CloseChannelRequest) returns (CloseChannelResponse);
+}
+
+message OpenChannelRequest {
+  Account payer = 1;
+  Account payee = 2;
+  UsdcAmount max_spend = 3; // cap; channel can never spend beyond this.
+}
+message OpenChannelResponse {
+  string channel_id = 1;
+}
+
+message QuoteRequest {
+  string channel_id = 1;
+  string segment_id = 2;
+  uint64 segment_bytes = 3;
+}
+message QuoteResponse {
+  UsdcAmount price = 1;
+}
+
+message SettleSegmentRequest {
+  string channel_id = 1;
+  string segment_id = 2;
+  UsdcAmount amount = 3;
+  bytes segment_hash = 4; // proof of verified delivery; gates the release.
+}
+message SettleSegmentResponse {
+  UsdcAmount channel_spent = 1; // cumulative spent so far, for the cap check.
+}
+
+message CloseChannelRequest {
+  string channel_id = 1;
+}
+message CloseChannelResponse {
+  string settlement_tx = 1;      // on-chain close tx hash.
+  UsdcAmount final_spent = 2;
+}
+
+// ---------------------------------------------------------------------------
+// StorageService — non-custodial smart-contract escrow for storage deals
+// (p2p-0021). Contract-as-job-queue; viewrr skims a coded protocol fee.
+// ---------------------------------------------------------------------------
+service StorageService {
+  // OpenStorageDeal funds an on-chain escrow deal. Payout auto-splits to the
+  // provider on verified proof-of-storage; viewrr's fee is coded into the split.
+  rpc OpenStorageDeal(OpenStorageDealRequest) returns (OpenStorageDealResponse);
+
+  // GetDealStatus reports the deal's on-chain state.
+  rpc GetDealStatus(GetDealStatusRequest) returns (GetDealStatusResponse);
+}
+
+message OpenStorageDealRequest {
+  Account buyer = 1;
+  string content_id = 2;
+  uint64 size_bytes = 3;
+  UsdcAmount escrow = 4;
+}
+message OpenStorageDealResponse {
+  string deal_id = 1;
+  string escrow_tx = 2; // on-chain funding tx hash.
+}
+
+message GetDealStatusRequest {
+  string deal_id = 1;
+}
+message GetDealStatusResponse {
+  DealState state = 1;
+  UsdcAmount escrow_remaining = 2;
+}
+
+enum DealState {
+  DEAL_STATE_UNSPECIFIED = 0;
+  DEAL_STATE_OPEN = 1;        // funded, awaiting/holding a provider.
+  DEAL_STATE_ACTIVE = 2;      // provider storing, proofs landing.
+  DEAL_STATE_SETTLED = 3;     // completed, escrow paid out.
+  DEAL_STATE_FAILED = 4;      // slashed / refunded.
+}

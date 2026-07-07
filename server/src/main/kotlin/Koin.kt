@@ -19,6 +19,8 @@ import wtf.jobin.koin.identityModule
 import wtf.jobin.koin.redisModule
 import wtf.jobin.koin.mediaModule
 import wtf.jobin.koin.musicModule
+import wtf.jobin.koin.p2pModule
+import wtf.jobin.koin.payModule
 import wtf.jobin.koin.recsModule
 import wtf.jobin.koin.partyModule
 import wtf.jobin.koin.scannerModule
@@ -45,12 +47,14 @@ fun Application.configureKoin() {
                 scannerModule,
                 mediaModule,
                 recsModule,
+                payModule, // mesh-hub: gRPC client into viewrr-pay — DI only, dials on first call
                 watchModule,
                 partyModule,
                 downloadsModule,
                 collectionModule,
                 musicModule,
                 editorialModule,
+                p2pModule, // #125: pure peer ranking/selection — DI only, no candidate source wired yet
                 workletModule, // #121 slice 1 — DI only; nothing spawns until started below
             )
         }

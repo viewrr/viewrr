@@ -76,6 +76,8 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
+    // mesh-hub: in-process fake gRPC server for SettlementClientTest (no Ktor Application needed).
+    testImplementation(libs.kotlinx.rpc.grpc.server)
 }
 
 // --- Container image via Jib (daemon-less, Gradle-cached) ---

@@ -235,3 +235,14 @@ object PoolContentReplicas : UUIDTable("pool_content_replicas") {
 
     init { uniqueIndex(ownerId, contentKey, nodeId) } // one replica per (content, device)
 }
+
+// mesh-hub (docs/pay/1-grpc-contract-service-skeleton.md): local opt-in gate mirrors V22.
+// A row exists ONLY once SettlementClient.ensureWallet has returned an address for the account —
+// GET /api/pay/wallet consults this table first so an account that never opted in never triggers a
+// gRPC call. wallet_address is cached to avoid re-deriving it on every balance read.
+object PayWallets : Table("pay_wallets") {
+    val accountId = reference("account_id", IdentityAccounts.id, onDelete = ReferenceOption.CASCADE)
+    val walletAddress = text("wallet_address")
+    val optedInAt = timestamp("opted_in_at")
+    override val primaryKey = PrimaryKey(accountId)
+}

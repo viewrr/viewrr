@@ -59,6 +59,9 @@ import wtf.jobin.cluster.agentRoutes
 import wtf.jobin.cluster.agentRawRoutes
 import wtf.jobin.cluster.agentHlsRoutes // #95
 import wtf.jobin.availability.catalogAvailabilityRoutes // #124
+import wtf.jobin.pay.PayWalletRepository
+import wtf.jobin.pay.SettlementClient
+import wtf.jobin.pay.walletRoutes
 
 fun Application.configureRouting() {
     val appConfig by inject<AppConfig>()
@@ -101,6 +104,8 @@ fun Application.configureRouting() {
     val nodeRegistry by inject<NodeRegistry>()
     val editorialRepo by inject<EditorialRepository>()
     val editorialIngest by inject<EditorialIngestService>()
+    val settlement by inject<SettlementClient>()
+    val payWallets by inject<PayWalletRepository>()
     routing {
         get("/health") { call.respondText("ok") }
         // #120: identity (publicKey challenge→verify) is the sole auth path; the argon2 /auth login
@@ -135,6 +140,7 @@ fun Application.configureRouting() {
         agentRoutes(nodeRegistry, db)
         stremioRoutes(db, appConfig.media, appConfig.publicBaseUrl, stremioKeys)
         catalogAvailabilityRoutes(db) // #124: public, TMDB-gated Title -> swarm topic lookup
+        walletRoutes(settlement, payWallets) // mesh-hub: HTTP wallet contract for mobile/web
     }
     partyHub.startFlushLoop(this)
     editorialIngest.startRefreshLoop(this, appConfig.editorial.refreshIntervalMinutes)

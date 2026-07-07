@@ -3,6 +3,7 @@ package wtf.jobin.worklet
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
@@ -69,10 +70,37 @@ class WorkletHypercore(private val rpc: WorkletRpc) {
         rpc.call("swarmJoin", params, timeoutMs)
     }
 
+    /**
+     * mesh-hub (P2P-ADR 0008/0014): read-only DHT presence check. Joins [topicHex] on a fresh,
+     * throwaway Hyperswarm as a lookup-only client (no core, nothing announced), counts distinct
+     * peer connections found within [waitMs], then leaves and tears the swarm down. Returns a
+     * PRESENCE COUNT, never a peer identity — pseudonymity is structural (see [swarmJoin] and
+     * `wtf.jobin.availability.AvailabilityService`). [timeoutMs] bounds the whole RPC, so it must
+     * exceed [waitMs] by enough margin for DHT announce/lookup + the wait window itself.
+     */
+    suspend fun swarmLookup(
+        topicHex: String,
+        waitMs: Long = 3000,
+        timeoutMs: Long = waitMs + 15_000,
+    ): LookupResult {
+        val params = buildJsonObject { put("topicHex", topicHex); put("waitMs", waitMs) }
+        val obj = rpc.call("swarmLookup", params, timeoutMs).jsonObject
+        return LookupResult(
+            topicHex = obj.getValue("topicHex").jsonPrimitive.content,
+            peersFound = obj.getValue("peersFound").jsonPrimitive.int,
+        )
+    }
+
     data class CoreInfo(
         val handle: Long,
         val keyHex: String,
         val writable: Boolean,
         val length: Long,
+    )
+
+    /** Result of [swarmLookup]: a content topic and how many distinct peers answered — no who. */
+    data class LookupResult(
+        val topicHex: String,
+        val peersFound: Int,
     )
 }

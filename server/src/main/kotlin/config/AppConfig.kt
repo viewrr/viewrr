@@ -15,6 +15,7 @@ data class AppConfig(
     val media: Media,
     val cors: Cors,
     val recs: Recs,
+    val pay: Pay, // mesh-hub: gRPC client into viewrr-pay (docs/pay/1) — read-only wallet calls
     val scanner: Scanner,
     val editorial: Editorial,
     val cluster: Cluster,
@@ -66,6 +67,11 @@ data class AppConfig(
     data class Cors(val allowedHosts: List<String>)
 
     data class Recs(val grpcTarget: String)
+
+    // mesh-hub (docs/pay/1-grpc-contract-service-skeleton.md): the Hub's gRPC target for
+    // viewrr-pay. Loopback per docs/pay/2 ("local Hub-over-loopback") — default matches
+    // viewrr-pay's own `cmd/viewrr-pay` default listen address (VIEWRR_PAY_ADDR=:50051).
+    data class Pay(val grpcTarget: String)
 
     data class Scanner(val fallbackIntervalMinutes: Long)
 
@@ -166,6 +172,10 @@ data class AppConfig(
             ),
             recs = Recs(
                 grpcTarget = env.config.propertyOrNull("viewrr.recs.grpcTarget")?.getString()
+                    ?: "localhost:50051",
+            ),
+            pay = Pay(
+                grpcTarget = env.config.propertyOrNull("viewrr.pay.grpcTarget")?.getString()
                     ?: "localhost:50051",
             ),
             scanner = Scanner(

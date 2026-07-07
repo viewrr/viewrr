@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * #121 inc-2 (P2P-ADR 0003): proves the Hyper* core over the shipped seam — Hypercore append +
@@ -103,6 +104,54 @@ class WorkletHypercoreSmokeTest {
             runCatching { readerRpc.close() }
             killTree(writerProc)
             killTree(readerProc)
+            scope.cancel()
+        }
+    }
+
+    /**
+     * mesh-hub (P2P-ADR 0008/0014): end-to-end announce + lookup. One `hyperlet.mjs` process opens
+     * a core and `swarmJoin`s [topicHex] as SERVER (the announce path — see [AvailabilityService]);
+     * a SEPARATE process does a read-only `swarmLookup` of the same topic with no core at all. This
+     * is the live proof that a lookup finds a real announced provider over the DHT — the fake-seam
+     * unit test ([wtf.jobin.availability.AvailabilityLookupServiceTest]) proves the wiring, this
+     * proves the wire. Same network-gated skip discipline as its sibling above: never fails on "no
+     * DHT", only on an actual mismatch.
+     */
+    @Test
+    fun liveSwarmLookup_findsAnAnnouncedProvider() = runBlocking {
+        val worklet = resolveWorklet("hyperlet.mjs") ?: return@runBlocking skip("could not locate worklet/hyperlet.mjs")
+        val runtime = resolveRuntime() ?: return@runBlocking skip("no `bare` runtime on PATH")
+        if (!depsInstalled(worklet)) return@runBlocking skip("worklet/node_modules missing — run `bun install` in worklet/")
+
+        val topicHex = randomHex(32)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val writerProc = spawnHyperlet(runtime, worklet)
+        val lookerProc = spawnHyperlet(runtime, worklet)
+        val writerRpc = WorkletRpc(writerProc.inputStream, writerProc.outputStream, scope, defaultTimeoutMs = 8000)
+        val lookerRpc = WorkletRpc(lookerProc.inputStream, lookerProc.outputStream, scope, defaultTimeoutMs = 8000)
+        val writer = WorkletHypercore(writerRpc)
+        val looker = WorkletHypercore(lookerRpc)
+        try {
+            withTimeout(45_000) {
+                val core = writer.coreOpen()
+                writer.swarmJoin(core.handle, topicHex) // announces as server/provider, no data needed
+
+                val result = looker.swarmLookup(topicHex, waitMs = 5000, timeoutMs = 30_000)
+                assertEquals(topicHex, result.topicHex)
+                assertTrue(result.peersFound >= 1, "lookup found no announced provider (peersFound=${result.peersFound})")
+            }
+            println("[hyper-swarm-lookup] OK: lookup found an announced provider over a live Hyperswarm topic")
+        } catch (e: TimeoutCancellationException) {
+            skip("no DHT lookup within budget — network-gated (expected off-network / in CI)")
+        } catch (e: WorkletRpcException.Timeout) {
+            skip("worklet RPC timed out (${e.message}) — DHT unreachable in this environment")
+        } catch (e: WorkletRpcException.Closed) {
+            skip("worklet transport closed early (${e.message}) — runtime/network unavailable")
+        } finally {
+            runCatching { writerRpc.close() }
+            runCatching { lookerRpc.close() }
+            killTree(writerProc)
+            killTree(lookerProc)
             scope.cancel()
         }
     }

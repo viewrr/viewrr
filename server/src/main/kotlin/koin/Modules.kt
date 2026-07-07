@@ -101,6 +101,14 @@ val recsModule = module {
     single { RecEngineClient(get<AppConfig>().recs.grpcTarget) }
 }
 
+// mesh-hub (docs/pay/1-grpc-contract-service-skeleton.md): the Hub's gRPC client into
+// viewrr-pay. Lazy single, same createdAtStart=false shape as recsModule above — a dev box with
+// viewrr-pay not running still boots clean; the GrpcClient only dials on the first call.
+val payModule = module {
+    single { wtf.jobin.pay.SettlementClient(get<AppConfig>().pay.grpcTarget) }
+    single { wtf.jobin.pay.PayWalletRepository(get()) } // mesh-hub: opt-in gate, DB-backed
+}
+
 val watchModule = module {
     single { WatchEventRepository(get()) }
     single { ContinueWatchingService(get()) }
@@ -131,4 +139,11 @@ val musicModule = module {
 val editorialModule = module {
     single { wtf.jobin.editorial.EditorialRepository(get()) }
     single { wtf.jobin.editorial.EditorialIngestService(get()) }
+}
+
+// #125 (P2P-ADR 0009): pure ranking + selection over swarm-discovered candidates. Stateless,
+// zero-dependency — DI only so callers (once the swarm candidate source lands, #121 Hyper*)
+// can inject it without changing call sites, same rationale as PeerSelectionService's own docstring.
+val p2pModule = module {
+    single { wtf.jobin.p2p.PeerSelectionService() }
 }
