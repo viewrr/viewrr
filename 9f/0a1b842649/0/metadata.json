@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "9f0a1b842649",
+  "session_id": "4126a28d-1f2d-4536-951a-d092fea196a4",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T09:59:35.793434Z",
+  "branch": "feat/cross-session-memory",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".claude/hooks/stop-summarize.py",
+    "memory/2026-08-14.md",
+    "memory/spike/.gitignore",
+    "memory/spike/hybrid_spike.py",
+    "memory/spike/import_logs.py",
+    "memory/spike/recall.py"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "26e34b5f-3d0e-451e-8b6d-08310fcbda6b",
+  "token_usage": {
+    "input_tokens": 98385,
+    "cache_creation_tokens": 4543069,
+    "cache_read_tokens": 56895612,
+    "output_tokens": 331574,
+    "api_call_count": 232
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T09:59:35.638269Z",
+    "agent_lines": 231,
+    "human_added": 647629,
+    "human_modified": 64,
+    "human_removed": 0,
+    "total_committed": 647914,
+    "agent_percentage": 0.035652879857511956
+  }
+}
