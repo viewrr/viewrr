@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "153ce1f7fe69",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/api/gen-embedded-spec.py",
+    "docs/api/openapi.yaml",
+    "docs/deploy.sh",
+    "docs/index.html"
+  ],
+  "sessions": [
+    {
+      "metadata": "/15/3ce1f7fe69/0/metadata.json",
+      "transcript": "/15/3ce1f7fe69/0/full.jsonl",
+      "context": "/15/3ce1f7fe69/0/context.md",
+      "content_hash": "/15/3ce1f7fe69/0/content_hash.txt",
+      "prompt": "/15/3ce1f7fe69/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2023,
+    "cache_creation_tokens": 45182,
+    "cache_read_tokens": 5428086,
+    "output_tokens": 33948,
+    "api_call_count": 33
+  }
+}

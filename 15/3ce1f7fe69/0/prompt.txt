@@ -1,0 +1,21 @@
+fic https://github.com/viewrr/viewrr/issues/181
+
+---
+
+are the docs done?
+
+---
+
+Then publish it
+
+---
+
+and update the gh issue with the link to latest fixed docs
+
+---
+
+yes
+
+---
+
+unify
