@@ -4,8 +4,9 @@
 # OR `export CLOUDFLARE_API_TOKEN=<token with Pages:Edit>`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# keep the published spec in sync with the source of truth
-cp server/src/main/resources/openapi/documentation.yaml docs/openapi.yaml
+# Single source of truth: docs/api/openapi.yaml (served directly by docs/index.html).
+# Regenerate the server's embedded 3.0.3 copy so /swagger stays in sync too.
+python3 docs/api/gen-embedded-spec.py
 # create the project once (ignore error if it already exists)
 bunx wrangler pages project create viewrr-docs --production-branch main 2>/dev/null || true
 bunx wrangler pages deploy docs --project-name viewrr-docs --commit-dirty=true

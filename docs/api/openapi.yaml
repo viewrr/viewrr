@@ -43,13 +43,16 @@ servers:
         default: http://localhost:8080
 
 tags:
+  - name: System
   - name: Auth
   - name: Browse
   - name: Detail
   - name: Home
   - name: Watch
   - name: Playback
+  - name: Collections
   - name: Music
+  - name: Admin
 
 security:
   - bearerAuth: []
@@ -511,6 +514,184 @@ paths:
               schema: { type: string, format: binary }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # ───────────────────────── System ─────────────────────────
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: ok, content: { text/plain: { schema: { type: string, example: ok } } } }
+
+  # ───────────────────────── Playback (HLS + sidecars) ─────────────────────────
+  /stream/{media_id}/{file}:
+    get:
+      tags: [Playback]
+      summary: Serve an HLS playlist/segment (or vtt/jpg) for a video — JWT or ?key= path
+      description: |
+        Bearer-or-key variant of the keyed `/stream/k/...` URL. Fetch `playlist.m3u8` first (lazily
+        transcoded on first hit), then the variant playlists and `.ts` segments it references. Range
+        requests supported. Auth: send `Authorization: Bearer <accessToken>` (browser/app) OR a
+        Stremio `?key=` (device profile). Parental-blocked or missing media returns a bare 404.
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: file, in: path, required: true, schema: { type: string }, example: playlist.m3u8 }
+        - { name: key, in: query, required: false, schema: { type: string }, description: "Stremio device key (alternative to a bearer)" }
+      responses:
+        "200": { description: file bytes (m3u8 / ts / vtt / jpg) }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /media/{media_id}/subtitles:
+    get:
+      tags: [Playback]
+      summary: List subtitle tracks (extracts embedded tracks to WebVTT on first call)
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SubtitleTrack" } }
+  /media/{media_id}/trickplay:
+    get:
+      tags: [Playback]
+      summary: Seek-preview sprite sheet + WebVTT (generated on first call)
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TrickplayInfo" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ───────────────────────── Collections ─────────────────────────
+  /collections:
+    get:
+      tags: [Collections]
+      summary: List the current user's collections
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CollectionView" } } } } }
+    post:
+      tags: [Collections]
+      summary: Create a collection
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionView" } } } }
+  /collections/{id}:
+    get:
+      tags: [Collections]
+      summary: Collection with its items
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionDetailView" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Collections]
+      summary: Delete a collection
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content }, "404": { $ref: "#/components/responses/NotFound" } }
+  /collections/{id}/items:
+    post:
+      tags: [Collections]
+      summary: Add a media item to a collection
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [mediaId], properties: { mediaId: { type: string, format: uuid }, position: { type: integer, default: 0 } } } } }
+      responses: { "204": { description: No Content }, "404": { $ref: "#/components/responses/NotFound" } }
+  /collections/{id}/items/{mediaId}:
+    delete:
+      tags: [Collections]
+      summary: Remove a media item from a collection
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mediaId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: No Content }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  # ───────────────────────── Admin (admin JWT claim required) ─────────────────────────
+  /admin/libraries:
+    get:
+      tags: [Admin]
+      summary: List libraries
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LibraryView" } } } } } }
+    post:
+      tags: [Admin]
+      summary: Create a library (kind = movies | shows | music). Scans + (video) watches on create.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateLibraryRequest" } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/LibraryView" } } } } }
+  /admin/libraries/{id}:
+    patch:
+      tags: [Admin]
+      summary: Rename / enable-disable watching
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { name: { type: string }, watchEnabled: { type: boolean } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LibraryView" } } } } }
+    delete:
+      tags: [Admin]
+      summary: Delete a library
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content } }
+  /admin/libraries/{id}/scan:
+    post:
+      tags: [Admin]
+      summary: Trigger a re-scan
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScanResult" } } } } }
+  /admin/media/{id}/transcode:
+    post:
+      tags: [Admin]
+      summary: Trigger HLS transcode (or remux) of a media item
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { mediaId: { type: string }, hlsPath: { type: string } } } } } } }
+  /admin/media/{id}:
+    patch:
+      tags: [Admin]
+      summary: Set a media item's content rating (G | PG | PG-13 | R | NC-17 | null)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { contentRating: { type: [string, "null"], example: PG-13 } } } } }
+      responses: { "204": { description: No Content }, "400": { $ref: "#/components/responses/BadRequest" }, "404": { $ref: "#/components/responses/NotFound" } }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/UserView" } } } } } }
+  /admin/users/{id}/promote:
+    post:
+      tags: [Admin]
+      summary: Set/clear admin
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [isAdmin], properties: { isAdmin: { type: boolean } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+  /admin/users/{id}/active:
+    post:
+      tags: [Admin]
+      summary: Enable / disable a user (disabled users can't log in)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [active], properties: { active: { type: boolean } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+  /admin/users/{id}/max-rating:
+    post:
+      tags: [Admin]
+      summary: Set a user's parental max rating (null = unrestricted)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { maxRating: { type: [string, "null"], example: PG-13 } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+  /admin/users/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete a user (cannot delete yourself)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { "204": { description: No Content }, "400": { $ref: "#/components/responses/BadRequest" }, "404": { $ref: "#/components/responses/NotFound" } }
+  /admin/recs/refresh:
+    post:
+      tags: [Admin]
+      summary: Trigger a recommendations recompute (gRPC to the rec engine)
+      responses: { "200": { description: OK }, "503": { description: rec engine unavailable, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -538,6 +719,7 @@ components:
       schema: { type: string, format: uuid }
       example: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
 
+  responses:
     # NOTE ON BODIES: identity 401s and validation 400/503 carry `{ error }`. But a JWT auth
     # failure on a protected route (missing/expired/invalid bearer) and a bare NotFoundException
     # (missing OR parental-hidden media) return the status code with an EMPTY body.
@@ -754,3 +936,89 @@ components:
         trackNumber: { type: [integer, "null"] }
         discNumber: { type: [integer, "null"] }
         durationSecs: { type: [integer, "null"] }
+
+    SubtitleTrack:
+      type: object
+      required: [index, url]
+      properties:
+        index: { type: integer }
+        lang: { type: [string, "null"] }
+        label: { type: [string, "null"] }
+        url: { type: string, description: WebVTT URL }
+
+    TrickplayInfo:
+      type: object
+      required: [spriteUrl, vttUrl, intervalSecs, thumbW, thumbH, tileCols]
+      properties:
+        spriteUrl: { type: string }
+        vttUrl: { type: string }
+        intervalSecs: { type: integer }
+        thumbW: { type: integer }
+        thumbH: { type: integer }
+        tileCols: { type: integer }
+
+    CollectionView:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string }
+
+    CollectionItemView:
+      type: object
+      required: [mediaId, title, position]
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: [string, "null"] }
+        position: { type: integer }
+
+    CollectionDetailView:
+      type: object
+      required: [id, name, createdAt, items]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string }
+        items: { type: array, items: { $ref: "#/components/schemas/CollectionItemView" } }
+
+    LibraryView:
+      type: object
+      required: [id, name, kind, rootPath, watchEnabled, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [movies, shows, music] }
+        rootPath: { type: string }
+        watchEnabled: { type: boolean }
+        lastScannedAt: { type: [string, "null"] }
+        createdAt: { type: string }
+
+    CreateLibraryRequest:
+      type: object
+      required: [name, kind, rootPath]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [movies, shows, music] }
+        rootPath: { type: string }
+
+    ScanResult:
+      type: object
+      required: [added, removed, skipped]
+      properties:
+        added: { type: integer }
+        removed: { type: integer }
+        skipped: { type: integer }
+
+    UserView:
+      type: object
+      required: [id, username, email, isAdmin, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string }
+        displayName: { type: [string, "null"] }
+        isAdmin: { type: boolean }
+        isActive: { type: boolean }
+        maxRating: { type: [string, "null"] }

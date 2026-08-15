@@ -1,535 +1,1873 @@
+# AUTO-GENERATED from docs/api/openapi.yaml by docs/api/gen-embedded-spec.py.
+# Do NOT hand-edit — edit the canonical spec and re-run the generator.
 openapi: 3.0.3
 info:
-  title: viewrr API
-  version: "1.0.0"
-  description: |
-    Self-hosted OTT backend — movies, TV, and music.
-
-    **Auth:** call `POST /auth/login`, take `accessToken`, send it as `Authorization: Bearer <token>`
-    on every other endpoint. Access tokens expire in 15 minutes; use `POST /auth/refresh`.
+  title: viewrr Client API
+  version: 0.1.0
+  description: "Client-facing contract for viewrr — a self-hosted OTT backend (movies, TV, music).\nThis\
+    \ spec is the source of truth that the **viewrr-web** (Vue) and **viewrr-mobile**\n(Compose) clients\
+    \ build against. It is mockable with Prism (see `mock/README.md`).\n\n## Auth (Ed25519 self-custody\
+    \ — #120/#150; argon2 `/auth` + Keycloak/OIDC retired)\nKeys and signatures are **lowercase hex**\
+    \ (raw 32-byte pubkey → 64 chars, raw 64-byte sig →\n128 chars). Ceremony:\n1. `POST /identity/register`\
+    \ `{ publicKey, signature }` — `signature` = Ed25519 over the UTF-8\n   bytes of the literal `viewrr:register`.\
+    \ Idempotent (201 first time, 200 thereafter).\n2. `GET /identity/challenge` → `{ challenge }` — a\
+    \ single-use hex nonce.\n3. `POST /identity/verify` `{ publicKey, challenge, signature }` — `signature`\
+    \ = Ed25519 over the\n   UTF-8 bytes of `challenge`. Returns `{ accessToken, refreshToken }`.\n\n\
+    Send `accessToken` as `Authorization: Bearer <token>`. Access tokens are HS256 JWTs, **TTL\n15 min**,\
+    \ `sub` = account UUID.\n\n> **No refresh endpoint is wired today.** A 30-day `refreshToken` is issued\
+    \ but there is no\n> route to redeem it — when the access token expires, **re-run challenge→verify**\
+    \ (fresh\n> challenge each time). Do not hardcode a re-auth interval; track the 15-min TTL.\n\n##\
+    \ Playback / streaming auth (no bearer)\nThe HLS player itself is authenticated by a **per-device\
+    \ stremio-key embedded in the URL\npath**, not by a bearer header. `GET /playback/{id}` (bearer-protected)\
+    \ returns a fully\nresolved `url` of the form `/stream/k/{key}/{mediaId}/playlist.m3u8`. The player\
+    \ fetches\nthat URL (and its relative segment/variant URIs) with no `Authorization` header. Sidecar\n\
+    `subtitlesUrl` / `trickplayUrl` are returned absolute too.\n\nSource of truth: Kotlin `@Serializable`\
+    \ DTOs under `server/src/main/kotlin/**`.\n"
 servers:
-  - url: http://localhost:8080
-    description: Local dev
-  - url: "{publicBaseUrl}"
-    description: Deployment
-    variables:
-      publicBaseUrl:
-        default: http://localhost:8080
+- url: http://localhost:4010
+  description: Prism mock (clients point their API base here)
+- url: http://localhost:8080
+  description: Local dev server
+- url: '{publicBaseUrl}'
+  description: Deployment
+  variables:
+    publicBaseUrl:
+      default: http://localhost:8080
 tags:
-  - name: System
-  - name: Auth
-  - name: Movies
-  - name: Music
-  - name: Playback
-  - name: Collections
-  - name: Watch
-  - name: Admin
+- name: System
+- name: Auth
+- name: Browse
+- name: Detail
+- name: Home
+- name: Watch
+- name: Playback
+- name: Collections
+- name: Music
+- name: Admin
 security:
-  - bearerAuth: []
+- bearerAuth: []
 paths:
+  /identity/register:
+    post:
+      tags:
+      - Auth
+      summary: Register an Ed25519 public key (idempotent)
+      description: '`signature` = Ed25519 over the UTF-8 bytes of the literal `viewrr:register`. First
+
+        registration returns 201; an already-registered key returns 200 with the stored account
+
+        (never a duplicate). `displayName` is a cosmetic petname set once at first register.
+
+        '
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterIdentityRequest'
+            example:
+              publicKey: 3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c
+              signature: e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountView'
+        '200':
+          description: Already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /identity/challenge:
+    get:
+      tags:
+      - Auth
+      summary: Mint a single-use challenge nonce to sign
+      security: []
+      responses:
+        '200':
+          description: Challenge nonce
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengeResponse'
+              example:
+                challenge: 9f8c1a2b3d4e5f60718293a4b5c6d7e8
+  /identity/verify:
+    post:
+      tags:
+      - Auth
+      summary: Prove key ownership over a challenge, receive session tokens
+      description: '`signature` = Ed25519 over the UTF-8 bytes of `challenge`. The nonce is consumed
+
+        (single-use) before the signature check. Bad signature, unknown/consumed challenge, and
+
+        unregistered key all collapse to 401 (no oracle).
+
+        '
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyIdentityRequest'
+            example:
+              publicKey: 3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c
+              challenge: 9f8c1a2b3d4e5f60718293a4b5c6d7e8
+              signature: '...'
+      responses:
+        '200':
+          description: Token pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjFkIn0.sig
+                refreshToken: f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /me/stremio-key:
+    post:
+      tags:
+      - Auth
+      summary: Get this user's per-device stremio key + Stremio install URL
+      description: 'Returns the path-credential `key` used in keyed HLS URLs and the Stremio addon
+
+        install URL. The same key appears in `playback.url` from `GET /playback/{id}`.
+
+        '
+      responses:
+        '200':
+          description: Key + install URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StremioKey'
+              example:
+                key: a1b2c3d4e5f6
+                installUrl: http://localhost:8080/stremio/a1b2c3d4e5f6/manifest.json
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /media:
+    get:
+      tags:
+      - Browse
+      summary: Flat browse of all visible media (parental-filtered)
+      description: '`sort=createdAt&order=desc` is the "Recently Added" row.'
+      parameters:
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+          - title
+          - createdAt
+          default: title
+        description: '`title` sorts by cleanTitle; `createdAt` by ingest time.'
+      - name: order
+        in: query
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+          default: asc
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 200
+      responses:
+        '200':
+          description: Media list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MediaItem'
+              example:
+              - id: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                title: Blade Runner 2049 (2017)
+                cleanTitle: Blade Runner 2049
+                showTitle: null
+                seasonNumber: null
+                episodeNumber: null
+                year: 2017
+                durationSecs: 9824
+                hlsPath: movies/blade-runner-2049/playlist.m3u8
+                contentRating: R
+                poster: https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg
+                backdrop: https://image.tmdb.org/t/p/original/ilRyazdMJwN05exqhwK4tMKBYZs.jpg
+                overview: Thirty years after the events of the first film, a new blade runner unearths
+                  a long-buried secret.
+              - id: b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f
+                title: Dune (2021)
+                cleanTitle: Dune
+                showTitle: null
+                seasonNumber: null
+                episodeNumber: null
+                year: 2021
+                durationSecs: 9300
+                hlsPath: movies/dune/playlist.m3u8
+                contentRating: PG-13
+                poster: https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg
+                backdrop: https://image.tmdb.org/t/p/original/jYEW5xZkZk2YfXT16JZ.jpg
+                overview: Paul Atreides leads nomadic tribes in a revolt against the galactic emperor.
+  /media/{id}:
+    get:
+      tags:
+      - Detail
+      summary: Single media item (detail)
+      description: Returns 404 (not 403) when parental-hidden — existence is not leaked.
+      parameters:
+      - $ref: '#/components/parameters/MediaId'
+      responses:
+        '200':
+          description: Media item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaItem'
+              example:
+                id: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                title: Blade Runner 2049 (2017)
+                cleanTitle: Blade Runner 2049
+                showTitle: null
+                seasonNumber: null
+                episodeNumber: null
+                year: 2017
+                durationSecs: 9824
+                hlsPath: movies/blade-runner-2049/playlist.m3u8
+                contentRating: R
+                poster: https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg
+                backdrop: https://image.tmdb.org/t/p/original/ilRyazdMJwN05exqhwK4tMKBYZs.jpg
+                overview: Thirty years after the events of the first film, a new blade runner unearths
+                  a long-buried secret.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /media/search:
+    get:
+      tags:
+      - Browse
+      summary: Full-text (BM25) search across media (parental-filtered)
+      description: 'ParadeDB `@@@` BM25 over `title`; `q` accepts Tantivy syntax (`+matrix -resurrections`).
+
+        **Returns the reduced `MediaSearchHit`, NOT the full `MediaItem`** — it OMITS `cleanTitle`,
+
+        `year`, `showTitle`, and artwork. `title` still embeds the year. To get those fields, match
+
+        the hit''s `id` back to `GET /media`.
+
+        '
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+        example: dune
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 20
+      responses:
+        '200':
+          description: Matching media (reduced shape)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MediaSearchHit'
+              example:
+              - id: b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f
+                title: Dune (2021)
+                hlsPath: movies/dune/playlist.m3u8
+                durationSecs: 9300
+                mimeType: video/x-matroska
+                contentRating: PG-13
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /series:
+    get:
+      tags:
+      - Browse
+      summary: List shows (grouped TV series)
+      responses:
+        '200':
+          description: Shows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShowView'
+              example:
+              - showTitle: Severance
+                episodeCount: 18
+                seasonCount: 2
+              - showTitle: The Expanse
+                episodeCount: 62
+                seasonCount: 6
+  /series/{showTitle}:
+    get:
+      tags:
+      - Detail
+      summary: A single show with seasons + episodes
+      description: '`showTitle` is URL-encoded; the server auto-decodes.'
+      parameters:
+      - name: showTitle
+        in: path
+        required: true
+        schema:
+          type: string
+        example: Severance
+      responses:
+        '200':
+          description: Series detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeriesDetailView'
+              example:
+                showTitle: Severance
+                seasons:
+                - season: 1
+                  episodes:
+                  - mediaId: c0a1b2c3-d4e5-4f60-8a1b-2c3d4e5f6071
+                    title: Good News About Hell
+                    seasonNumber: 1
+                    episodeNumber: 1
+                    hlsPath: tv/severance/s01e01/playlist.m3u8
+                  - mediaId: c0a1b2c3-d4e5-4f60-8a1b-2c3d4e5f6072
+                    title: Half Loop
+                    seasonNumber: 1
+                    episodeNumber: 2
+                    hlsPath: tv/severance/s01e02/playlist.m3u8
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /home/top:
+    get:
+      tags:
+      - Home
+      summary: Top 10 by watch count (falls back to recently-added)
+      responses:
+        '200':
+          description: Top media
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MediaItem'
+              example:
+              - id: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                title: Blade Runner 2049 (2017)
+                cleanTitle: Blade Runner 2049
+                showTitle: null
+                seasonNumber: null
+                episodeNumber: null
+                year: 2017
+                durationSecs: 9824
+                hlsPath: movies/blade-runner-2049/playlist.m3u8
+                contentRating: R
+                poster: https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg
+                backdrop: https://image.tmdb.org/t/p/original/ilRyazdMJwN05exqhwK4tMKBYZs.jpg
+                overview: Thirty years after the events of the first film, a new blade runner unearths
+                  a long-buried secret.
+  /home/featured:
+    get:
+      tags:
+      - Home
+      summary: Up to 8 items with backdrop art (falls back to recently-added)
+      responses:
+        '200':
+          description: Featured media
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MediaItem'
+              example:
+              - id: b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f
+                title: Dune (2021)
+                cleanTitle: Dune
+                showTitle: null
+                seasonNumber: null
+                episodeNumber: null
+                year: 2021
+                durationSecs: 9300
+                hlsPath: movies/dune/playlist.m3u8
+                contentRating: PG-13
+                poster: https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg
+                backdrop: https://image.tmdb.org/t/p/original/jYEW5xZkZk2YfXT16JZ.jpg
+                overview: Paul Atreides leads nomadic tribes in a revolt against the galactic emperor.
+  /me/continue-watching:
+    get:
+      tags:
+      - Home
+      summary: Continue-watching feed (latest unfinished item per media)
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Continue-watching items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContinueWatchingItem'
+              example:
+              - mediaId: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                title: Blade Runner 2049 (2017)
+                hlsPath: movies/blade-runner-2049/playlist.m3u8
+                durationSecs: 9824
+                positionSecs: 4200
+                percent: 42
+              - mediaId: c0a1b2c3-d4e5-4f60-8a1b-2c3d4e5f6071
+                title: Severance S01E01
+                hlsPath: tv/severance/s01e01/playlist.m3u8
+                durationSecs: 2880
+                positionSecs: 600
+                percent: 20
+  /me/recommendations:
+    get:
+      tags:
+      - Home
+      summary: Pre-computed recommendations for this user
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+              example:
+              - mediaId: b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f
+                title: Dune (2021)
+                hlsPath: movies/dune/playlist.m3u8
+                score: 0.93
+                rank: 1
+              - mediaId: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                title: Blade Runner 2049 (2017)
+                hlsPath: movies/blade-runner-2049/playlist.m3u8
+                score: 0.88
+                rank: 2
+  /watch-events:
+    post:
+      tags:
+      - Watch
+      summary: Record a playback telemetry event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchEventCreate'
+            example:
+              mediaId: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+              positionSecs: 4200
+              eventType: progress
+              sessionId: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7081
+      responses:
+        '201':
+          description: Event recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchEventCreated'
+              example:
+                id: 90217
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /watch-events/me:
+    get:
+      tags:
+      - Watch
+      summary: This user's watch events for one media item
+      description: '`mediaId` is **required**. `limit` is capped at 50.'
+      parameters:
+      - name: mediaId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 50
+      responses:
+        '200':
+          description: Watch events (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WatchEventView'
+              example:
+              - id: 90217
+                mediaId: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                positionSecs: 4200
+                eventType: progress
+                sessionId: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7081
+                createdAt: '2026-06-23T18:42:10Z'
+              - id: 90201
+                mediaId: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+                positionSecs: 60
+                eventType: start
+                sessionId: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7081
+                createdAt: '2026-06-23T17:30:01Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /playback/{id}:
+    get:
+      tags:
+      - Playback
+      summary: Resolve a media id to a playable HLS URL + resume + sidecars
+      description: 'The single call a first-party client makes to start playback. `url` is a fully
+
+        resolved, **path-keyed** HLS playlist (see the `/stream/k/...` note below) so the
+
+        player needs no bearer token. `startPositionSecs` is the resume point from the
+
+        user''s latest watch event (0 if none). Returns 404 if hidden by parental rating.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/MediaId'
+      responses:
+        '200':
+          description: Resolved playback
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackResolve'
+              example:
+                url: http://localhost:8080/stream/k/a1b2c3d4e5f6/7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b/playlist.m3u8
+                type: hls
+                startPositionSecs: 4200
+                subtitlesUrl: http://localhost:8080/media/7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b/subtitles
+                trickplayUrl: http://localhost:8080/media/7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b/trickplay
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /stream/k/{key}/{mediaId}/playlist.m3u8:
+    get:
+      tags:
+      - Playback
+      summary: Keyed HLS master playlist (path-credential auth, NO bearer)
+      description: '**Do not call this directly with logic** — take the `url` from `GET /playback/{id}`
+
+        and hand it to the HLS player as-is. The `{key}` path segment IS the credential
+
+        (resolves to a user); no `Authorization` header is sent. The player also fetches the
+
+        relative segment (`*.ts`) and variant playlist URIs referenced inside the returned
+
+        `.m3u8`, all under the same `/stream/k/{key}/{mediaId}/` prefix. Documented here so
+
+        clients understand the URL shape; it is not bearer-protected.
+
+        '
+      security:
+      - stremioKeyInPath: []
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Per-device stremio key (path credential).
+        example: a1b2c3d4e5f6
+      - name: mediaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+      responses:
+        '200':
+          description: HLS master playlist
+          content:
+            application/vnd.apple.mpegurl:
+              schema:
+                type: string
+              example: '#EXTM3U
+
+                #EXT-X-VERSION:3
+
+                #EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080
+
+                stream_0/playlist.m3u8
+
+                '
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /music/albums:
+    get:
+      tags:
+      - Music
+      summary: List albums
+      responses:
+        '200':
+          description: Albums
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Album'
+              example:
+              - album: Random Access Memories
+                trackCount: 13
+                artist: Daft Punk
+              - album: In Rainbows
+                trackCount: 10
+                artist: Radiohead
+  /music/albums/{album}/tracks:
+    get:
+      tags:
+      - Music
+      summary: Tracks on an album
+      parameters:
+      - name: album
+        in: path
+        required: true
+        schema:
+          type: string
+        example: Random Access Memories
+      responses:
+        '200':
+          description: Tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Track'
+              example:
+              - id: d1e2f3a4-b5c6-4d7e-8f90-1a2b3c4d5e60
+                title: Give Life Back to Music
+                artist: Daft Punk
+                album: Random Access Memories
+                albumArtist: Daft Punk
+                trackNumber: 1
+                discNumber: 1
+                durationSecs: 274
+              - id: d1e2f3a4-b5c6-4d7e-8f90-1a2b3c4d5e61
+                title: Get Lucky
+                artist: Daft Punk
+                album: Random Access Memories
+                albumArtist: Daft Punk
+                trackNumber: 8
+                discNumber: 1
+                durationSecs: 369
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /music/tracks/{id}/audio:
+    get:
+      tags:
+      - Music
+      summary: Stream the original audio file (Range-enabled)
+      description: 'Returns the raw audio bytes with `Accept-Ranges` support. Content-Type is the
+
+        track''s stored MIME type (e.g. `audio/flac`, `audio/mpeg`) or octet-stream.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/MediaId'
+      responses:
+        '200':
+          description: Audio bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partial content (Range request)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
   /health:
     get:
-      tags: [System]
+      tags:
+      - System
       summary: Liveness probe
       security: []
       responses:
-        "200": { description: ok, content: { text/plain: { schema: { type: string, example: ok } } } }
-
-  /auth/register:
-    post:
-      tags: [Auth]
-      summary: Register a new user
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RegisterRequest" }
-      responses:
-        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
-        "409": { description: username taken }
-  /auth/login:
-    post:
-      tags: [Auth]
-      summary: Log in, returns a token pair
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/LoginRequest" }
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
-        "401": { description: invalid credentials }
-  /auth/refresh:
-    post:
-      tags: [Auth]
-      summary: Exchange a refresh token for a new pair (single-use, rotated)
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
-        "401": { description: invalid refresh token }
-  /auth/logout:
-    post:
-      tags: [Auth]
-      summary: Revoke a refresh token
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
-      responses:
-        "204": { description: No Content }
-
-  /media:
-    get:
-      tags: [Movies]
-      summary: List all videos the caller can see (parental-filtered)
-      parameters:
-        - { name: limit, in: query, schema: { type: integer, default: 200, minimum: 1, maximum: 1000 } }
-      responses:
-        "200":
-          description: OK
+        '200':
+          description: ok
           content:
-            application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/MediaListItem" } }
-        "401": { description: missing/expired token }
-  /media/search:
-    get:
-      tags: [Movies]
-      summary: Full-text (BM25) search over titles
-      parameters:
-        - { name: q, in: query, required: true, schema: { type: string }, description: query string }
-        - { name: limit, in: query, schema: { type: integer, default: 20 } }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/MediaSearchHit" } }
-        "400": { description: blank query }
-  /series:
-    get:
-      tags: [Movies]
-      summary: List TV shows (files named SxxExx) with episode/season counts
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/ShowView" } }
-  /series/{showTitle}:
-    get:
-      tags: [Movies]
-      summary: Episodes of a show grouped by season
-      parameters:
-        - { name: showTitle, in: path, required: true, schema: { type: string } }
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SeriesDetailView" } } } }
-        "404": { description: unknown show }
-  /me/continue-watching:
-    get:
-      tags: [Movies]
-      summary: In-progress videos for the current user (resume)
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/ContinueWatchingItem" } }
-  /me/recommendations:
-    get:
-      tags: [Movies]
-      summary: Pre-computed recommendations for the current user
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
-
+            text/plain:
+              schema:
+                type: string
+                example: ok
   /stream/{media_id}/{file}:
     get:
-      tags: [Playback]
-      summary: Serve an HLS playlist/segment (or vtt/jpg) for a video
-      description: "Fetch `playlist.m3u8` first, then the variant playlists and `.ts` segments it references. Range requests supported."
+      tags:
+      - Playback
+      summary: Serve an HLS playlist/segment (or vtt/jpg) for a video — JWT or ?key= path
+      description: 'Bearer-or-key variant of the keyed `/stream/k/...` URL. Fetch `playlist.m3u8` first
+        (lazily
+
+        transcoded on first hit), then the variant playlists and `.ts` segments it references. Range
+
+        requests supported. Auth: send `Authorization: Bearer <accessToken>` (browser/app) OR a
+
+        Stremio `?key=` (device profile). Parental-blocked or missing media returns a bare 404.
+
+        '
       parameters:
-        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { name: file, in: path, required: true, schema: { type: string }, example: playlist.m3u8 }
+      - name: media_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: file
+        in: path
+        required: true
+        schema:
+          type: string
+        example: playlist.m3u8
+      - name: key
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Stremio device key (alternative to a bearer)
       responses:
-        "200": { description: file bytes (m3u8 / ts / vtt / jpg) }
-        "404": { description: not found or blocked by parental rating }
+        '200':
+          description: file bytes (m3u8 / ts / vtt / jpg)
+        '404':
+          $ref: '#/components/responses/NotFound'
   /media/{media_id}/subtitles:
     get:
-      tags: [Playback]
+      tags:
+      - Playback
       summary: List subtitle tracks (extracts embedded tracks to WebVTT on first call)
       parameters:
-        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: media_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/SubtitleTrack" } }
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubtitleTrack'
   /media/{media_id}/trickplay:
     get:
-      tags: [Playback]
+      tags:
+      - Playback
       summary: Seek-preview sprite sheet + WebVTT (generated on first call)
       parameters:
-        - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: media_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TrickplayInfo" } } } }
-        "404": { description: media missing or too short for trickplay }
-
-  /music/albums:
-    get:
-      tags: [Music]
-      summary: List all albums
-      responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/AlbumView" } }
-  /music/albums/{album}/tracks:
-    get:
-      tags: [Music]
-      summary: List tracks in an album (track-ordered)
-      parameters:
-        - { name: album, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/TrackView" } }
-        "404": { description: unknown album }
-  /music/tracks/{id}/audio:
-    get:
-      tags: [Music]
-      summary: Stream the original audio file (range supported)
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses:
-        "200": { description: audio bytes }
-        "206": { description: partial content (range) }
-        "404": { description: track or file not found }
-
+              schema:
+                $ref: '#/components/schemas/TrickplayInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /collections:
     get:
-      tags: [Collections]
+      tags:
+      - Collections
       summary: List the current user's collections
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CollectionView" } } } } }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionView'
     post:
-      tags: [Collections]
+      tags:
+      - Collections
       summary: Create a collection
       requestBody:
         required: true
-        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              properties:
+                name:
+                  type: string
       responses:
-        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionView" } } } }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionView'
   /collections/{id}:
     get:
-      tags: [Collections]
+      tags:
+      - Collections
       summary: Collection with its items
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CollectionDetailView" } } } }
-        "404": { description: not found / not owner }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionDetailView'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
-      tags: [Collections]
+      tags:
+      - Collections
       summary: Delete a collection
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      responses: { "204": { description: No Content }, "404": { description: not found } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '404':
+          $ref: '#/components/responses/NotFound'
   /collections/{id}/items:
     post:
-      tags: [Collections]
+      tags:
+      - Collections
       summary: Add a media item to a collection
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         required: true
-        content: { application/json: { schema: { type: object, required: [mediaId], properties: { mediaId: { type: string, format: uuid }, position: { type: integer, default: 0 } } } } }
-      responses: { "204": { description: No Content }, "404": { description: not found } }
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - mediaId
+              properties:
+                mediaId:
+                  type: string
+                  format: uuid
+                position:
+                  type: integer
+                  default: 0
+      responses:
+        '204':
+          description: No Content
+        '404':
+          $ref: '#/components/responses/NotFound'
   /collections/{id}/items/{mediaId}:
     delete:
-      tags: [Collections]
+      tags:
+      - Collections
       summary: Remove a media item from a collection
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { name: mediaId, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { "204": { description: No Content }, "404": { description: not found } }
-
-  /watch-events:
-    post:
-      tags: [Watch]
-      summary: Record a playback event (drives resume)
-      requestBody:
+      - name: id
+        in: path
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/WatchEvent" } } }
-      responses: { "201": { description: recorded }, "204": { description: recorded } }
-  /watch-events/me:
-    get:
-      tags: [Watch]
-      summary: Recent watch events for the current user
+        schema:
+          type: string
+          format: uuid
+      - name: mediaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
-
+        '204':
+          description: No Content
+        '404':
+          $ref: '#/components/responses/NotFound'
   /admin/libraries:
     get:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: List libraries
-      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LibraryView" } } } } } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LibraryView'
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Create a library (kind = movies | shows | music). Scans + (video) watches on create.
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/CreateLibraryRequest" } } }
-      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/LibraryView" } } } } }
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLibraryRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryView'
   /admin/libraries/{id}:
     patch:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Rename / enable-disable watching
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
-        content: { application/json: { schema: { type: object, properties: { name: { type: string }, watchEnabled: { type: boolean } } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LibraryView" } } } } }
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                watchEnabled:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryView'
     delete:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Delete a library
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      responses: { "204": { description: No Content } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
   /admin/libraries/{id}/scan:
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Trigger a re-scan
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScanResult" } } } } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
   /admin/media/{id}/transcode:
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Trigger HLS transcode (or remux) of a media item
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { mediaId: { type: string }, hlsPath: { type: string } } } } } } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mediaId:
+                    type: string
+                  hlsPath:
+                    type: string
   /admin/media/{id}:
     patch:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Set a media item's content rating (G | PG | PG-13 | R | NC-17 | null)
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
-        content: { application/json: { schema: { type: object, properties: { contentRating: { type: string, nullable: true, example: PG-13 } } } } }
-      responses: { "204": { description: No Content }, "400": { description: invalid rating }, "404": { description: not found } }
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contentRating:
+                  type: string
+                  example: PG-13
+                  nullable: true
+      responses:
+        '204':
+          description: No Content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /admin/users:
     get:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: List users
-      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/UserView" } } } } } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserView'
   /admin/users/{id}/promote:
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Set/clear admin
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [isAdmin], properties: { isAdmin: { type: boolean } } } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - isAdmin
+              properties:
+                isAdmin:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserView'
   /admin/users/{id}/active:
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Enable / disable a user (disabled users can't log in)
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [active], properties: { active: { type: boolean } } } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - active
+              properties:
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserView'
   /admin/users/{id}/max-rating:
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Set a user's parental max rating (null = unrestricted)
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      requestBody: { content: { application/json: { schema: { type: object, properties: { maxRating: { type: string, nullable: true, example: PG-13 } } } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserView" } } } } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxRating:
+                  type: string
+                  example: PG-13
+                  nullable: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserView'
   /admin/users/{id}:
     delete:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Delete a user (cannot delete yourself)
-      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
-      responses: { "204": { description: No Content }, "400": { description: self-delete }, "404": { description: not found } }
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /admin/recs/refresh:
     post:
-      tags: [Admin]
+      tags:
+      - Admin
       summary: Trigger a recommendations recompute (gRPC to the rec engine)
-      responses: { "200": { description: OK } }
-
+      responses:
+        '200':
+          description: OK
+        '503':
+          description: rec engine unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: 'HS256 JWT access token from `POST /identity/verify` (15-min TTL, `sub` = account UUID).
+
+        The argon2 `/auth` login and Keycloak/OIDC are retired (#120/#150).
+
+        '
+    stremioKeyInPath:
+      type: apiKey
+      in: query
+      name: key
+      description: 'Marker only — the real credential is the `{key}` **path segment** of
+
+        `/stream/k/{key}/...`, not a query param. OpenAPI has no path-segment apiKey
+
+        location, so this is documented as a distinct scheme to flag that these URLs are
+
+        NOT bearer-protected.
+
+        '
+  parameters:
+    MediaId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b
+  responses:
+    Unauthorized:
+      description: Missing/invalid credentials. Identity endpoints return `{ error }`; a protected-route
+        bearer failure has an empty body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: signature does not verify
+    NotFound:
+      description: Not found (also returned for parental-hidden items — existence is never leaked). Empty
+        body.
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: q is required
   schemas:
-    RegisterRequest:
+    Error:
       type: object
-      required: [username, email, password]
       properties:
-        username: { type: string }
-        email: { type: string, format: email }
-        password: { type: string, format: password }
-        displayName: { type: string, nullable: true }
-    LoginRequest:
+        error:
+          type: string
+      required:
+      - error
+    RegisterIdentityRequest:
       type: object
-      required: [username, password]
+      required:
+      - publicKey
+      - signature
       properties:
-        username: { type: string, example: jobin }
-        password: { type: string, format: password, example: viewrr123 }
+        publicKey:
+          type: string
+          description: lowercase hex, raw 32-byte Ed25519 key (64 chars)
+        signature:
+          type: string
+          description: lowercase hex Ed25519 sig (128 chars) over UTF-8 `viewrr:register`
+        displayName:
+          type: string
+          description: optional cosmetic petname, set once at first register
+          nullable: true
+    ChallengeResponse:
+      type: object
+      required:
+      - challenge
+      properties:
+        challenge:
+          type: string
+          description: single-use hex nonce
+    VerifyIdentityRequest:
+      type: object
+      required:
+      - publicKey
+      - challenge
+      - signature
+      properties:
+        publicKey:
+          type: string
+          description: lowercase hex, raw 32-byte Ed25519 key
+        challenge:
+          type: string
+          description: the nonce from GET /identity/challenge
+        signature:
+          type: string
+          description: lowercase hex Ed25519 sig over the UTF-8 bytes of `challenge`
+    AccountView:
+      type: object
+      required:
+      - accountId
+      - publicKey
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        publicKey:
+          type: string
+        displayName:
+          type: string
+          nullable: true
     TokenPair:
       type: object
+      required:
+      - accessToken
+      - refreshToken
       properties:
-        accessToken: { type: string }
-        refreshToken: { type: string }
-    MediaListItem:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        title: { type: string }
-        cleanTitle: { type: string, nullable: true }
-        showTitle: { type: string, nullable: true }
-        seasonNumber: { type: integer, nullable: true }
-        episodeNumber: { type: integer, nullable: true }
-        year: { type: integer, nullable: true }
-        durationSecs: { type: integer, nullable: true }
-        hlsPath: { type: string, nullable: true, description: "null = not yet transcoded" }
-        contentRating: { type: string, nullable: true }
+        accessToken:
+          type: string
+          description: HS256 JWT, 15-min TTL, sub = account UUID
+        refreshToken:
+          type: string
+          description: opaque, 30-day — NOT redeemable today (no refresh route); re-run challenge→verify
+            on expiry
     MediaSearchHit:
       type: object
+      description: Reduced /media/search shape. Intentionally OMITS cleanTitle/year/showTitle/artwork
+        (see MediaItem). `title` embeds the year.
+      required:
+      - id
+      - title
       properties:
-        id: { type: string, format: uuid }
-        title: { type: string }
-        hlsPath: { type: string, nullable: true }
-        durationSecs: { type: integer, nullable: true }
-        mimeType: { type: string, nullable: true }
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: raw title, year-embedded
+        hlsPath:
+          type: string
+          nullable: true
+        durationSecs:
+          type: integer
+          nullable: true
+        mimeType:
+          type: string
+          nullable: true
+        contentRating:
+          type: string
+          nullable: true
+    StremioKey:
+      type: object
+      required:
+      - key
+      - installUrl
+      properties:
+        key:
+          type: string
+        installUrl:
+          type: string
+          format: uri
+    MediaItem:
+      type: object
+      description: Browse/detail item (Kotlin `MediaListItem`). TMDb art fields are null until enriched.
+      required:
+      - id
+      - title
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: Raw filename-derived title
+        cleanTitle:
+          type: string
+          description: Normalized display title
+          nullable: true
+        showTitle:
+          type: string
+          description: Parent show, for TV episodes
+          nullable: true
+        seasonNumber:
+          type: integer
+          nullable: true
+        episodeNumber:
+          type: integer
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        durationSecs:
+          type: integer
+          nullable: true
+        hlsPath:
+          type: string
+          description: Relative HLS playlist path (not a full URL)
+          nullable: true
+        contentRating:
+          type: string
+          description: e.g. G, PG, PG-13, R, TV-MA
+          nullable: true
+        poster:
+          type: string
+          format: uri
+          description: TMDb poster URL
+          nullable: true
+        backdrop:
+          type: string
+          format: uri
+          description: TMDb backdrop URL
+          nullable: true
+        overview:
+          type: string
+          nullable: true
+        contentUuid:
+          type: string
+          format: uuid
+          description: '#124 P2P content address (UUIDv5 of tmdbId); null when no tmdbId'
+          nullable: true
     ShowView:
       type: object
+      required:
+      - showTitle
+      - episodeCount
+      - seasonCount
       properties:
-        showTitle: { type: string }
-        episodeCount: { type: integer }
-        seasonCount: { type: integer }
+        showTitle:
+          type: string
+        episodeCount:
+          type: integer
+        seasonCount:
+          type: integer
     EpisodeView:
       type: object
+      required:
+      - mediaId
+      - title
       properties:
-        mediaId: { type: string, format: uuid }
-        title: { type: string }
-        seasonNumber: { type: integer, nullable: true }
-        episodeNumber: { type: integer, nullable: true }
-        hlsPath: { type: string, nullable: true }
+        mediaId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        seasonNumber:
+          type: integer
+          nullable: true
+        episodeNumber:
+          type: integer
+          nullable: true
+        hlsPath:
+          type: string
+          nullable: true
     SeasonView:
       type: object
+      required:
+      - episodes
       properties:
-        season: { type: integer, nullable: true }
-        episodes: { type: array, items: { $ref: "#/components/schemas/EpisodeView" } }
+        season:
+          type: integer
+          nullable: true
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EpisodeView'
     SeriesDetailView:
       type: object
+      required:
+      - showTitle
+      - seasons
       properties:
-        showTitle: { type: string }
-        seasons: { type: array, items: { $ref: "#/components/schemas/SeasonView" } }
+        showTitle:
+          type: string
+        seasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeasonView'
     ContinueWatchingItem:
       type: object
+      required:
+      - mediaId
+      - title
+      - positionSecs
+      - percent
       properties:
-        mediaId: { type: string, format: uuid }
-        title: { type: string }
-        hlsPath: { type: string, nullable: true }
-        durationSecs: { type: integer, nullable: true }
-        positionSecs: { type: integer }
-        percent: { type: integer }
+        mediaId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        hlsPath:
+          type: string
+          nullable: true
+        durationSecs:
+          type: integer
+          nullable: true
+        positionSecs:
+          type: integer
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+    Recommendation:
+      type: object
+      required:
+      - mediaId
+      - title
+      - score
+      - rank
+      properties:
+        mediaId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        hlsPath:
+          type: string
+          nullable: true
+        score:
+          type: number
+          format: float
+        rank:
+          type: integer
+          description: 1-based rank
+    WatchEventCreate:
+      type: object
+      required:
+      - mediaId
+      - positionSecs
+      - eventType
+      - sessionId
+      properties:
+        mediaId:
+          type: string
+          format: uuid
+        positionSecs:
+          type: integer
+          minimum: 0
+        eventType:
+          type: string
+          enum:
+          - start
+          - progress
+          - pause
+          - stop
+          - finish
+        sessionId:
+          type: string
+          format: uuid
+    WatchEventCreated:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: integer
+          format: int64
+    WatchEventView:
+      type: object
+      required:
+      - id
+      - mediaId
+      - positionSecs
+      - eventType
+      - sessionId
+      - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        mediaId:
+          type: string
+          format: uuid
+        positionSecs:
+          type: integer
+        eventType:
+          type: string
+          enum:
+          - start
+          - progress
+          - pause
+          - stop
+          - finish
+        sessionId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          description: ISO-8601 timestamp
+    PlaybackResolve:
+      type: object
+      required:
+      - url
+      - type
+      - startPositionSecs
+      - subtitlesUrl
+      - trickplayUrl
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Keyed HLS master playlist URL
+        type:
+          type: string
+          default: hls
+        startPositionSecs:
+          type: integer
+          description: Resume position (0 if none)
+        subtitlesUrl:
+          type: string
+          format: uri
+        trickplayUrl:
+          type: string
+          format: uri
+    Album:
+      type: object
+      required:
+      - album
+      - trackCount
+      properties:
+        album:
+          type: string
+        trackCount:
+          type: integer
+        artist:
+          type: string
+          nullable: true
+    Track:
+      type: object
+      required:
+      - id
+      - title
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        artist:
+          type: string
+          nullable: true
+        album:
+          type: string
+          nullable: true
+        albumArtist:
+          type: string
+          nullable: true
+        trackNumber:
+          type: integer
+          nullable: true
+        discNumber:
+          type: integer
+          nullable: true
+        durationSecs:
+          type: integer
+          nullable: true
     SubtitleTrack:
       type: object
+      required:
+      - index
+      - url
       properties:
-        index: { type: integer }
-        lang: { type: string, nullable: true }
-        label: { type: string, nullable: true }
-        url: { type: string }
+        index:
+          type: integer
+        lang:
+          type: string
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        url:
+          type: string
+          description: WebVTT URL
     TrickplayInfo:
       type: object
+      required:
+      - spriteUrl
+      - vttUrl
+      - intervalSecs
+      - thumbW
+      - thumbH
+      - tileCols
       properties:
-        spriteUrl: { type: string }
-        vttUrl: { type: string }
-        intervalSecs: { type: integer }
-        thumbW: { type: integer }
-        thumbH: { type: integer }
-        tileCols: { type: integer }
-    AlbumView:
-      type: object
-      properties:
-        album: { type: string }
-        trackCount: { type: integer }
-        artist: { type: string, nullable: true }
-    TrackView:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        title: { type: string }
-        artist: { type: string, nullable: true }
-        album: { type: string, nullable: true }
-        trackNumber: { type: integer, nullable: true }
-        discNumber: { type: integer, nullable: true }
-        durationSecs: { type: integer, nullable: true }
+        spriteUrl:
+          type: string
+        vttUrl:
+          type: string
+        intervalSecs:
+          type: integer
+        thumbW:
+          type: integer
+        thumbH:
+          type: integer
+        tileCols:
+          type: integer
     CollectionView:
       type: object
+      required:
+      - id
+      - name
+      - createdAt
       properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        createdAt: { type: string }
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
     CollectionItemView:
       type: object
+      required:
+      - mediaId
+      - title
+      - position
       properties:
-        mediaId: { type: string, format: uuid }
-        title: { type: string }
-        hlsPath: { type: string, nullable: true }
-        position: { type: integer }
+        mediaId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        hlsPath:
+          type: string
+          nullable: true
+        position:
+          type: integer
     CollectionDetailView:
       type: object
+      required:
+      - id
+      - name
+      - createdAt
+      - items
       properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        createdAt: { type: string }
-        items: { type: array, items: { $ref: "#/components/schemas/CollectionItemView" } }
-    WatchEvent:
-      type: object
-      required: [mediaId, positionSecs, eventType, sessionId]
-      properties:
-        mediaId: { type: string, format: uuid }
-        positionSecs: { type: integer }
-        eventType: { type: string, enum: [start, progress, pause, stop, finish] }
-        sessionId: { type: string, format: uuid }
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionItemView'
     LibraryView:
       type: object
+      required:
+      - id
+      - name
+      - kind
+      - rootPath
+      - watchEnabled
+      - createdAt
       properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        kind: { type: string, enum: [movies, shows, music] }
-        rootPath: { type: string }
-        watchEnabled: { type: boolean }
-        lastScannedAt: { type: string, nullable: true }
-        createdAt: { type: string }
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - movies
+          - shows
+          - music
+        rootPath:
+          type: string
+        watchEnabled:
+          type: boolean
+        lastScannedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
     CreateLibraryRequest:
       type: object
-      required: [name, kind, rootPath]
+      required:
+      - name
+      - kind
+      - rootPath
       properties:
-        name: { type: string }
-        kind: { type: string, enum: [movies, shows, music] }
-        rootPath: { type: string }
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - movies
+          - shows
+          - music
+        rootPath:
+          type: string
     ScanResult:
       type: object
+      required:
+      - added
+      - removed
+      - skipped
       properties:
-        added: { type: integer }
-        removed: { type: integer }
-        skipped: { type: integer }
+        added:
+          type: integer
+        removed:
+          type: integer
+        skipped:
+          type: integer
     UserView:
       type: object
+      required:
+      - id
+      - username
+      - email
+      - isAdmin
+      - isActive
       properties:
-        id: { type: string, format: uuid }
-        username: { type: string }
-        email: { type: string }
-        displayName: { type: string, nullable: true }
-        isAdmin: { type: boolean }
-        isActive: { type: boolean }
-        maxRating: { type: string, nullable: true }
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+        isAdmin:
+          type: boolean
+        isActive:
+          type: boolean
+        maxRating:
+          type: string
+          nullable: true
