@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "3a4cd49cf337",
+  "session_id": "4cd358af-b917-4314-8c51-55bb9d73c840",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-15T14:46:57.16151Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/api/client-api.md",
+    "docs/api/openapi.yaml",
+    "docs/openapi.yaml",
+    "memory/2026-08-15.md"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "7711d2e8-3365-4ca5-be3d-907ee22c2142",
+  "token_usage": {
+    "input_tokens": 37462,
+    "cache_creation_tokens": 274058,
+    "cache_read_tokens": 6789620,
+    "output_tokens": 37211,
+    "api_call_count": 68
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-15T14:46:57.109426Z",
+    "agent_lines": 280,
+    "human_added": 321512,
+    "human_modified": 10,
+    "human_removed": 0,
+    "total_committed": 321802,
+    "agent_percentage": 0.08701002479785706
+  }
+}
