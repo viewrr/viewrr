@@ -26,6 +26,24 @@ Status legend: ✅ exists today · 🔜 to build (tracked in Phase 20).
 | — | Account registry: Ravencloak `@handle → publicKey` (directory, not gate) | 🔜 | ADR p2p-0013; redeploy pending |
 | POST | `/me/stremio-key` | ✅ | mint/return the caller's long-lived per-device key |
 
+### Ceremony details + gotchas (the parts we kept reverse-engineering)
+Source of truth: `identity/IdentityRoutes.kt`, `identity/IdentityModels.kt`, `auth/TokenService.kt`.
+- **Encoding:** `publicKey`/`signature` are **lowercase hex** — raw 32-byte pubkey (64 chars),
+  raw 64-byte sig (128 chars). No base64, no `0x`.
+- **Register signs a fixed literal:** Ed25519 over the UTF-8 bytes of `viewrr:register`. Idempotent
+  (201 first, 200 after). Returns `AccountView {accountId, publicKey, displayName?}` — **not tokens.**
+- **Verify signs the challenge string:** Ed25519 over the UTF-8 bytes of the `challenge` value.
+  Nonce is single-use — fetch a fresh `/identity/challenge` per verify attempt.
+- **Access token:** HS256 JWT, **TTL 15 min** (`viewrr.auth.accessTtlMinutes`), `sub` = account UUID.
+- **No refresh endpoint exists today.** A 30-day `refreshToken` is returned but there is **no route
+  to redeem it** — on 401, **re-run challenge→verify**. Don't hardcode a re-auth interval (the old
+  14-min guess); drive it off the 15-min TTL.
+- **401 is opaque:** bad signature / unknown-or-consumed challenge / unregistered key all return
+  the same `401 {error}`. No oracle to distinguish them.
+- **Error shapes:** handled errors (validation 400, identity 401, rec-engine 503) carry
+  `{ "error": "…" }`. A **bare 404** (missing OR parental-hidden media) and a **JWT auth failure**
+  (missing/expired/invalid bearer) return the status with an **empty body**.
+
 ## Browse / Home
 The Apple-TV home is rows. Compose from these:
 | Row | Source | Status |
@@ -48,11 +66,16 @@ showTitle, season/episode, year, poster, backdrop, overview, durationSecs, conte
 ## Detail
 | Method | Path | Status | Notes |
 |---|---|---|---|
-| GET | `/media/{id}` | 🔜 | single-item detail (today detail comes via Stremio `meta`; add a clean REST detail) |
+| GET | `/media/{id}` | ✅ | single-item detail — full `MediaListItem` (404 when parental-hidden) |
 | GET | `/series/{showTitle}` | ✅ | show + seasons/episodes |
 
 ## Search
-| GET | `/media/search?q=` | ✅ | see `media/MediaSearchRoutes.kt` (pg_search/BM25) |
+| GET | `/media/search?q=&limit=` | ✅ | pg_search/BM25, `q` = Tantivy syntax; see `media/MediaSearchRoutes.kt` |
+
+⚠️ **Search returns a REDUCED shape** (`MediaSearchHit`: `id, title, hlsPath, durationSecs,
+mimeType, contentRating`) — it OMITS `cleanTitle`, `year`, `showTitle`, and artwork that `/media`
+returns. `title` embeds the year (`"Sintel (2010)"`); `cleanTitle`+`year` are separated and live
+**only on `/media`**. Match search hits back by `id` if you need those fields.
 
 ## Watch progress (drives Continue Watching + resume)
 | POST | `/watch-events` | ✅ | report progress `{mediaId, positionSecs, eventType, sessionId}` |
@@ -75,7 +98,7 @@ Devices cannot send a bearer, so playback authorizes via the **stremio-key path 
 Stremio clients** (Nuvio). First-party viewrr clients use the REST above, not the addon.
 
 ## Backend gaps to close (Phase 20, this agent)
-`/home/top`, `/home/featured`, `GET /media/{id}` detail, `GET /playback/{mediaId}` resolve,
-confirm `/media` sort params. Auth is done (self-custody Ed25519, #150); the Account
+`/home/top`, `/home/featured`, `GET /playback/{mediaId}` resolve. (`GET /media/{id}` detail and
+`/media` sort params now shipped.) Auth is done (self-custody Ed25519, #150); the Account
 registry (Ravencloak, ADR p2p-0013) is the remaining identity work. Capability-profile +
 locality on playback resolve come with Phase 15.

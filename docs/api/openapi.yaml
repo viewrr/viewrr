@@ -7,14 +7,21 @@ info:
     This spec is the source of truth that the **viewrr-web** (Vue) and **viewrr-mobile**
     (Compose) clients build against. It is mockable with Prism (see `mock/README.md`).
 
-    ## Auth
-    Call `POST /auth/login`, take `accessToken`, and send it as
-    `Authorization: Bearer <token>` on every other endpoint. Access tokens are short-lived
-    (~15 min) — refresh with `POST /auth/refresh`.
+    ## Auth (Ed25519 self-custody — #120/#150; argon2 `/auth` + Keycloak/OIDC retired)
+    Keys and signatures are **lowercase hex** (raw 32-byte pubkey → 64 chars, raw 64-byte sig →
+    128 chars). Ceremony:
+    1. `POST /identity/register` `{ publicKey, signature }` — `signature` = Ed25519 over the UTF-8
+       bytes of the literal `viewrr:register`. Idempotent (201 first time, 200 thereafter).
+    2. `GET /identity/challenge` → `{ challenge }` — a single-use hex nonce.
+    3. `POST /identity/verify` `{ publicKey, challenge, signature }` — `signature` = Ed25519 over the
+       UTF-8 bytes of `challenge`. Returns `{ accessToken, refreshToken }`.
 
-    > **OIDC migration note:** JWTs are issued by the server's own `auth-jwt` realm today.
-    > A Keycloak OIDC migration is planned; the bearer-token contract on the client side is
-    > expected to stay the same (still `Authorization: Bearer <jwt>`), only the issuer changes.
+    Send `accessToken` as `Authorization: Bearer <token>`. Access tokens are HS256 JWTs, **TTL
+    15 min**, `sub` = account UUID.
+
+    > **No refresh endpoint is wired today.** A 30-day `refreshToken` is issued but there is no
+    > route to redeem it — when the access token expires, **re-run challenge→verify** (fresh
+    > challenge each time). Do not hardcode a re-auth interval; track the 15-min TTL.
 
     ## Playback / streaming auth (no bearer)
     The HLS player itself is authenticated by a **per-device stremio-key embedded in the URL
@@ -49,17 +56,54 @@ security:
 
 paths:
   # ───────────────────────── Auth ─────────────────────────
-  /auth/login:
+  /identity/register:
     post:
       tags: [Auth]
-      summary: Log in with username + password
+      summary: Register an Ed25519 public key (idempotent)
+      description: |
+        `signature` = Ed25519 over the UTF-8 bytes of the literal `viewrr:register`. First
+        registration returns 201; an already-registered key returns 200 with the stored account
+        (never a duplicate). `displayName` is a cosmetic petname set once at first register.
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/LoginRequest" }
-            example: { username: "ada", password: "correct horse battery staple" }
+            schema: { $ref: "#/components/schemas/RegisterIdentityRequest" }
+            example: { publicKey: "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c", signature: "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b" }
+      responses:
+        "201": { description: Registered, content: { application/json: { schema: { $ref: "#/components/schemas/AccountView" } } } }
+        "200": { description: Already registered, content: { application/json: { schema: { $ref: "#/components/schemas/AccountView" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /identity/challenge:
+    get:
+      tags: [Auth]
+      summary: Mint a single-use challenge nonce to sign
+      security: []
+      responses:
+        "200":
+          description: Challenge nonce
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChallengeResponse" }
+              example: { challenge: "9f8c1a2b3d4e5f60718293a4b5c6d7e8" }
+
+  /identity/verify:
+    post:
+      tags: [Auth]
+      summary: Prove key ownership over a challenge, receive session tokens
+      description: |
+        `signature` = Ed25519 over the UTF-8 bytes of `challenge`. The nonce is consumed
+        (single-use) before the signature check. Bad signature, unknown/consumed challenge, and
+        unregistered key all collapse to 401 (no oracle).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VerifyIdentityRequest" }
+            example: { publicKey: "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c", challenge: "9f8c1a2b3d4e5f60718293a4b5c6d7e8", signature: "..." }
       responses:
         "200":
           description: Token pair
@@ -70,42 +114,6 @@ paths:
                 accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ZjFkIn0.sig"
                 refreshToken: "f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30"
         "401": { $ref: "#/components/responses/Unauthorized" }
-
-  /auth/refresh:
-    post:
-      tags: [Auth]
-      summary: Exchange a refresh token for a fresh token pair
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RefreshRequest" }
-            example: { refreshToken: "f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30" }
-      responses:
-        "200":
-          description: New token pair
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TokenPair" }
-              example:
-                accessToken: "eyJhbGciOiJIUzI1NiJ9.new.sig"
-                refreshToken: "9b2e0c44-1aa7-4f0e-8d3b-2c5e6a1f7b90"
-        "401": { $ref: "#/components/responses/Unauthorized" }
-
-  /auth/logout:
-    post:
-      tags: [Auth]
-      summary: Revoke a refresh token
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RefreshRequest" }
-            example: { refreshToken: "f3a9c2e1-7b44-4d2a-9c1e-0a8b6d5e4f30" }
-      responses:
-        "204": { description: Logged out (no content) }
 
   /me/stremio-key:
     post:
@@ -186,7 +194,12 @@ paths:
   /media/search:
     get:
       tags: [Browse]
-      summary: Full-text search across media (parental-filtered)
+      summary: Full-text (BM25) search across media (parental-filtered)
+      description: |
+        ParadeDB `@@@` BM25 over `title`; `q` accepts Tantivy syntax (`+matrix -resurrections`).
+        **Returns the reduced `MediaSearchHit`, NOT the full `MediaItem`** — it OMITS `cleanTitle`,
+        `year`, `showTitle`, and artwork. `title` still embeds the year. To get those fields, match
+        the hit's `id` back to `GET /media`.
       parameters:
         - name: q
           in: query
@@ -198,14 +211,14 @@ paths:
           schema: { type: integer, minimum: 1, default: 20 }
       responses:
         "200":
-          description: Matching media
+          description: Matching media (reduced shape)
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/MediaItem" }
+                items: { $ref: "#/components/schemas/MediaSearchHit" }
               example:
-                - { id: "b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f", title: "Dune (2021)", cleanTitle: "Dune", showTitle: null, seasonNumber: null, episodeNumber: null, year: 2021, durationSecs: 9300, hlsPath: "movies/dune/playlist.m3u8", contentRating: "PG-13", poster: "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg", backdrop: "https://image.tmdb.org/t/p/original/jYEW5xZkZk2YfXT16JZ.jpg", overview: "Paul Atreides leads nomadic tribes in a revolt against the galactic emperor." }
+                - { id: "b91f0d22-5a13-4c8e-8a77-9e0b1c2d3e4f", title: "Dune (2021)", hlsPath: "movies/dune/playlist.m3u8", durationSecs: 9300, mimeType: "video/x-matroska", contentRating: "PG-13" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /series:
@@ -505,8 +518,8 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        JWT access token from `POST /auth/login`. Server-issued today; Keycloak OIDC
-        migration planned (issuer changes, client contract stays bearer-based).
+        HS256 JWT access token from `POST /identity/verify` (15-min TTL, `sub` = account UUID).
+        The argon2 `/auth` login and Keycloak/OIDC are retired (#120/#150).
     stremioKeyInPath:
       type: apiKey
       in: query
@@ -525,19 +538,17 @@ components:
       schema: { type: string, format: uuid }
       example: "7d2c1a90-3e44-4b21-9f0a-1c2d3e4f5a6b"
 
-  responses:
+    # NOTE ON BODIES: identity 401s and validation 400/503 carry `{ error }`. But a JWT auth
+    # failure on a protected route (missing/expired/invalid bearer) and a bare NotFoundException
+    # (missing OR parental-hidden media) return the status code with an EMPTY body.
     Unauthorized:
-      description: Missing/invalid credentials
+      description: "Missing/invalid credentials. Identity endpoints return `{ error }`; a protected-route bearer failure has an empty body."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
-          example: { error: "invalid credentials" }
+          example: { error: "signature does not verify" }
     NotFound:
-      description: Not found (also returned for parental-hidden items)
-      content:
-        application/json:
-          schema: { $ref: "#/components/schemas/Error" }
-          example: { error: "not found" }
+      description: "Not found (also returned for parental-hidden items — existence is never leaked). Empty body."
     BadRequest:
       description: Invalid request parameters
       content:
@@ -552,25 +563,54 @@ components:
         error: { type: string }
       required: [error]
 
-    LoginRequest:
+    RegisterIdentityRequest:
       type: object
-      required: [username, password]
+      required: [publicKey, signature]
       properties:
-        username: { type: string }
-        password: { type: string }
+        publicKey: { type: string, description: "lowercase hex, raw 32-byte Ed25519 key (64 chars)" }
+        signature: { type: string, description: "lowercase hex Ed25519 sig (128 chars) over UTF-8 `viewrr:register`" }
+        displayName: { type: [string, "null"], description: "optional cosmetic petname, set once at first register" }
 
-    RefreshRequest:
+    ChallengeResponse:
       type: object
-      required: [refreshToken]
+      required: [challenge]
       properties:
-        refreshToken: { type: string }
+        challenge: { type: string, description: single-use hex nonce }
+
+    VerifyIdentityRequest:
+      type: object
+      required: [publicKey, challenge, signature]
+      properties:
+        publicKey: { type: string, description: "lowercase hex, raw 32-byte Ed25519 key" }
+        challenge: { type: string, description: "the nonce from GET /identity/challenge" }
+        signature: { type: string, description: "lowercase hex Ed25519 sig over the UTF-8 bytes of `challenge`" }
+
+    AccountView:
+      type: object
+      required: [accountId, publicKey]
+      properties:
+        accountId: { type: string, format: uuid }
+        publicKey: { type: string }
+        displayName: { type: [string, "null"] }
 
     TokenPair:
       type: object
       required: [accessToken, refreshToken]
       properties:
-        accessToken: { type: string, description: Short-lived JWT (~15 min) }
-        refreshToken: { type: string }
+        accessToken: { type: string, description: "HS256 JWT, 15-min TTL, sub = account UUID" }
+        refreshToken: { type: string, description: "opaque, 30-day — NOT redeemable today (no refresh route); re-run challenge→verify on expiry" }
+
+    MediaSearchHit:
+      type: object
+      description: "Reduced /media/search shape. Intentionally OMITS cleanTitle/year/showTitle/artwork (see MediaItem). `title` embeds the year."
+      required: [id, title]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, description: "raw title, year-embedded" }
+        hlsPath: { type: [string, "null"] }
+        durationSecs: { type: [integer, "null"] }
+        mimeType: { type: [string, "null"] }
+        contentRating: { type: [string, "null"] }
 
     StremioKey:
       type: object

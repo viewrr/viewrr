@@ -5,8 +5,29 @@ info:
   description: |
     Self-hosted OTT backend — movies, TV, and music.
 
-    **Auth:** call `POST /auth/login`, take `accessToken`, send it as `Authorization: Bearer <token>`
-    on every other endpoint. Access tokens expire in 15 minutes; use `POST /auth/refresh`.
+    **Auth (Ed25519 self-custody, #120).** The argon2 `/auth` login and Keycloak/OIDC are retired;
+    this challenge→verify ceremony is the SOLE auth path. Keys and signatures are **lowercase hex**
+    (raw 32-byte public key → 64 hex chars; raw 64-byte signature → 128 hex chars).
+
+    1. `POST /identity/register` `{ publicKey, signature }` — `signature` = Ed25519 over the UTF-8
+       bytes of the literal `viewrr:register`. Idempotent (re-registering a key is a no-op 200).
+    2. `GET /identity/challenge` → `{ challenge }` — a single-use hex nonce.
+    3. `POST /identity/verify` `{ publicKey, challenge, signature }` — `signature` = Ed25519 over the
+       UTF-8 bytes of the `challenge` string. Returns `{ accessToken, refreshToken }`.
+
+    Send `accessToken` as `Authorization: Bearer <token>` on every authenticated endpoint. Access
+    tokens are **HS256 JWTs, TTL 15 min** (`viewrr.auth.accessTtlMinutes`), `sub` = account UUID.
+
+    **No refresh endpoint is wired today.** A `refreshToken` (opaque, 30-day) is issued but there is
+    currently no route to redeem it — when the access token expires, **re-run challenge→verify**
+    (get a fresh challenge each time; nonces are single-use). Track re-auth against the 15-min TTL,
+    not a hardcoded guess.
+
+    **Error shape.** Handled errors return `{ "error": "<message>" }` (validation 400, identity 401,
+    rec-engine 503). Bare `NotFoundException` (missing OR parental-hidden media) and JWT auth
+    failures (missing/expired/invalid token) return the status code with **an empty body** — a 404
+    never distinguishes "absent" from "blocked", and identity 401s never distinguish "unknown key"
+    from "bad signature" (no oracle).
 servers:
   - url: http://localhost:8080
     description: Local dev
@@ -17,7 +38,7 @@ servers:
         default: http://localhost:8080
 tags:
   - name: System
-  - name: Auth
+  - name: Identity
   - name: Movies
   - name: Music
   - name: Playback
@@ -35,63 +56,63 @@ paths:
       responses:
         "200": { description: ok, content: { text/plain: { schema: { type: string, example: ok } } } }
 
-  /auth/register:
+  /identity/register:
     post:
-      tags: [Auth]
-      summary: Register a new user
+      tags: [Identity]
+      summary: Register an Ed25519 public key (idempotent)
+      description: |
+        `signature` is Ed25519 over the UTF-8 bytes of the literal `viewrr:register` by the key's
+        secret. Idempotent: a first registration returns 201, an already-registered key returns 200
+        with the stored account (never a duplicate). `displayName` is an optional cosmetic petname
+        set once at first register; it is NOT re-writable by re-registering.
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/RegisterRequest" }
+            schema: { $ref: "#/components/schemas/RegisterIdentityRequest" }
       responses:
-        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
-        "409": { description: username taken }
-  /auth/login:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AccountView" } } } }
+        "200": { description: Already registered, content: { application/json: { schema: { $ref: "#/components/schemas/AccountView" } } } }
+        "401": { description: "signature does not verify — `{ error }`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /identity/challenge:
+    get:
+      tags: [Identity]
+      summary: Mint a single-use challenge nonce to sign
+      description: Each call returns a fresh, single-use hex nonce. Consumed on `/identity/verify`; get a new one per verify attempt.
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ChallengeResponse" } } } }
+  /identity/verify:
     post:
-      tags: [Auth]
-      summary: Log in, returns a token pair
+      tags: [Identity]
+      summary: Prove key ownership over a challenge, receive session tokens
+      description: |
+        `signature` is Ed25519 over the UTF-8 bytes of the `challenge` string. The challenge is
+        consumed (single-use) before the signature check, so a replayed body cannot mint a second
+        session. On success returns the app's normal token pair.
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/LoginRequest" }
+            schema: { $ref: "#/components/schemas/VerifyIdentityRequest" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
-        "401": { description: invalid credentials }
-  /auth/refresh:
-    post:
-      tags: [Auth]
-      summary: Exchange a refresh token for a new pair (single-use, rotated)
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
-        "401": { description: invalid refresh token }
-  /auth/logout:
-    post:
-      tags: [Auth]
-      summary: Revoke a refresh token
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } }
-      responses:
-        "204": { description: No Content }
+        "401": { description: "bad signature / unknown-or-consumed challenge / unregistered key — all collapse to `{ error }` (no oracle)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 
   /media:
     get:
       tags: [Movies]
       summary: List all videos the caller can see (parental-filtered)
+      description: |
+        Returns the **rich** `MediaListItem` (includes `cleanTitle`, `year`, `showTitle`, artwork).
+        `title` embeds the year (e.g. `"Sintel (2010)"`); for display/matching prefer `cleanTitle` +
+        `year`, which are the parsed, separated fields. `/media/search` returns a **reduced** shape —
+        match search hits back to this list by `id` if you need the extra fields.
       parameters:
+        - { name: sort, in: query, schema: { type: string, enum: [title, createdAt], default: title }, description: "createdAt desc = Recently Added" }
+        - { name: order, in: query, schema: { type: string, enum: [asc, desc], default: asc } }
         - { name: limit, in: query, schema: { type: integer, default: 200, minimum: 1, maximum: 1000 } }
       responses:
         "200":
@@ -104,9 +125,14 @@ paths:
     get:
       tags: [Movies]
       summary: Full-text (BM25) search over titles
+      description: |
+        ParadeDB `@@@` BM25 over `title`; `q` accepts Tantivy syntax (`+matrix -resurrections`).
+        Returns the **reduced** `MediaSearchHit` (no `cleanTitle`/`year`/`showTitle`/artwork — those
+        live only on `/media`). `title` still embeds the year. Match hits to `/media` by `id` when
+        you need the full record.
       parameters:
-        - { name: q, in: query, required: true, schema: { type: string }, description: query string }
-        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+        - { name: q, in: query, required: true, schema: { type: string }, description: query string (Tantivy syntax) }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1 } }
       responses:
         "200":
           description: OK
@@ -137,6 +163,9 @@ paths:
     get:
       tags: [Movies]
       summary: In-progress videos for the current user (resume)
+      description: Each media's latest watch_event, excluding media whose latest event is `finish`, newest-resumed first.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
       responses:
         "200":
           description: OK
@@ -147,14 +176,24 @@ paths:
     get:
       tags: [Movies]
       summary: Pre-computed recommendations for the current user
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Recommendation" } }
 
   /stream/{media_id}/{file}:
     get:
       tags: [Playback]
       summary: Serve an HLS playlist/segment (or vtt/jpg) for a video
-      description: "Fetch `playlist.m3u8` first, then the variant playlists and `.ts` segments it references. Range requests supported."
+      description: |
+        Fetch `playlist.m3u8` first (lazily transcoded on first hit), then the variant playlists and
+        `.ts` segments it references. Range requests supported. Identity: send `Authorization: Bearer
+        <accessToken>` (browser/app), or pass a Stremio `?key=` (device profile). Parental-blocked or
+        missing media returns a bare **404** (never distinguishes the two).
       parameters:
         - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: file, in: path, required: true, schema: { type: string }, example: playlist.m3u8 }
@@ -269,13 +308,22 @@ paths:
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/WatchEvent" } } }
-      responses: { "201": { description: recorded }, "204": { description: recorded } }
+      responses:
+        "201": { description: recorded, content: { application/json: { schema: { $ref: "#/components/schemas/WatchEventCreated" } } } }
+        "400": { description: "invalid eventType / negative positionSecs / non-UUID id — `{ error }`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /watch-events/me:
     get:
       tags: [Watch]
-      summary: Recent watch events for the current user
+      summary: Recent watch events for the current user, for one media
+      parameters:
+        - { name: mediaId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 50 } }
       responses:
-        "200": { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/WatchEventView" } }
 
   /admin/libraries:
     get:
@@ -367,31 +415,49 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
-    RegisterRequest:
+    Error:
       type: object
-      required: [username, email, password]
+      description: "Body of handled errors (validation 400, identity 401, rec-engine 503). Bare 404s and JWT auth failures have NO body."
       properties:
-        username: { type: string }
-        email: { type: string, format: email }
-        password: { type: string, format: password }
+        error: { type: string }
+    RegisterIdentityRequest:
+      type: object
+      required: [publicKey, signature]
+      properties:
+        publicKey: { type: string, description: "lowercase hex, raw 32-byte Ed25519 key (64 chars)" }
+        signature: { type: string, description: "lowercase hex Ed25519 sig (128 chars) over UTF-8 `viewrr:register`" }
+        displayName: { type: string, nullable: true, description: "optional cosmetic petname, set once at first register" }
+    ChallengeResponse:
+      type: object
+      properties:
+        challenge: { type: string, description: single-use hex nonce }
+    VerifyIdentityRequest:
+      type: object
+      required: [publicKey, challenge, signature]
+      properties:
+        publicKey: { type: string, description: "lowercase hex, raw 32-byte Ed25519 key" }
+        challenge: { type: string, description: "the nonce from GET /identity/challenge" }
+        signature: { type: string, description: "lowercase hex Ed25519 sig over the UTF-8 bytes of `challenge`" }
+    AccountView:
+      type: object
+      description: Returned by /identity/register — the account, no secret material.
+      properties:
+        accountId: { type: string, format: uuid }
+        publicKey: { type: string }
         displayName: { type: string, nullable: true }
-    LoginRequest:
-      type: object
-      required: [username, password]
-      properties:
-        username: { type: string, example: jobin }
-        password: { type: string, format: password, example: viewrr123 }
     TokenPair:
       type: object
+      description: "Returned by /identity/verify. accessToken = HS256 JWT (15-min TTL, sub=accountId). refreshToken issued but not yet redeemable — re-run challenge→verify on expiry."
       properties:
         accessToken: { type: string }
         refreshToken: { type: string }
     MediaListItem:
       type: object
+      description: "Rich catalog record. `title` embeds the year (`Sintel (2010)`); `cleanTitle`+`year` are the separated display/match fields."
       properties:
         id: { type: string, format: uuid }
-        title: { type: string }
-        cleanTitle: { type: string, nullable: true }
+        title: { type: string, description: "raw title, year-embedded" }
+        cleanTitle: { type: string, nullable: true, description: "parsed title without year — prefer for display/matching" }
         showTitle: { type: string, nullable: true }
         seasonNumber: { type: integer, nullable: true }
         episodeNumber: { type: integer, nullable: true }
@@ -399,14 +465,31 @@ components:
         durationSecs: { type: integer, nullable: true }
         hlsPath: { type: string, nullable: true, description: "null = not yet transcoded" }
         contentRating: { type: string, nullable: true }
+        poster: { type: string, nullable: true, description: "TMDb art, null until enriched" }
+        backdrop: { type: string, nullable: true }
+        overview: { type: string, nullable: true }
+        tmdbVoteAverage: { type: number, format: float, nullable: true, description: 0.0..10.0 }
+        tmdbVoteCount: { type: integer, nullable: true }
+        contentUuid: { type: string, nullable: true, description: "#124 P2P swarm content address (null if no tmdbId)" }
     MediaSearchHit:
       type: object
+      description: "Reduced search shape. Intentionally OMITS cleanTitle/year/showTitle/artwork (see /media). `title` embeds the year."
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
         hlsPath: { type: string, nullable: true }
         durationSecs: { type: integer, nullable: true }
         mimeType: { type: string, nullable: true }
+        contentRating: { type: string, nullable: true }
+    Recommendation:
+      type: object
+      description: Pre-computed by the out-of-process Python rec engine.
+      properties:
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        hlsPath: { type: string, nullable: true }
+        score: { type: number, format: float }
+        rank: { type: integer, description: 0-based position }
     ShowView:
       type: object
       properties:
@@ -497,9 +580,22 @@ components:
       required: [mediaId, positionSecs, eventType, sessionId]
       properties:
         mediaId: { type: string, format: uuid }
+        positionSecs: { type: integer, minimum: 0 }
+        eventType: { type: string, enum: [start, progress, pause, stop, finish] }
+        sessionId: { type: string, format: uuid }
+    WatchEventCreated:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+    WatchEventView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        mediaId: { type: string, format: uuid }
         positionSecs: { type: integer }
         eventType: { type: string, enum: [start, progress, pause, stop, finish] }
         sessionId: { type: string, format: uuid }
+        createdAt: { type: string }
     LibraryView:
       type: object
       properties:
